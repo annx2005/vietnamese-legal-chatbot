@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+google-cloud-pubsub
+google-cloud-storage
+pdfplumber
+pydantic-settings
+httpx
+redis

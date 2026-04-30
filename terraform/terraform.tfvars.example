@@ -1,0 +1,5 @@
+# Copy file này thành terraform.tfvars và điền thông tin thật của bạn
+project_id  = "your-gcp-project-id"
+region      = "us-central1"
+environment = "prod"
+bucket_name = "legal-rag-documents-prod"

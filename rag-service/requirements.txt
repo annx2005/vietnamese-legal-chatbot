@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+lance
+qdrant-client
+google-cloud-aiplatform
+langchain
+pydantic-settings
+httpx
+redis

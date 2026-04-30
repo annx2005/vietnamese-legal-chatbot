@@ -1,0 +1,72 @@
+### JetBrains IDE (IntelliJ, PyCharm, v.v.) ###
+.idea/
+*.iml
+*.iws
+out/
+agents/
+
+### macOS / OS specific ###
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+### Java & Maven (api-gateway, auth-service, upload-service) ###
+**/target/
+**/target-eclipse/
+**/*.class
+**/*.jar
+**/*.war
+**/*.nar
+**/*.ear
+**/*.crash
+**/*.db
+.mvn/wrapper/maven-wrapper.jar
+
+### Python (ingestion-service, rag-service) ###
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/.pytest_cache/
+**/.venv/
+**/venv/
+**/env/
+**/.env
+**/.ipynb_checkpoints/
+**/.mypy_cache/
+**/.poetry/
+
+### Terraform (terraform/) ###
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+crash.log
+crash.*.log
+**/*.tfvars
+**/*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl
+
+### GCP / Secrets / Keys ###
+**/*.key
+**/*.pem
+**/*secret*.json
+**/*credentials*.json
+**/*service-account*.json
+**/gcp-key.json
+
+### Docker & Local Volumes / Logs ###
+**/.docker/
+**/postgres_data/
+**/qdrant_data/
+**/redis_data/
+**/*.log
+

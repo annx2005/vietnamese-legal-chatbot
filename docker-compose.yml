@@ -1,0 +1,145 @@
+services:
+  # --- Infrastructure Services (Local Dev Only) ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: local-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-legal_rag_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - legal-network
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: local-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - legal-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: local-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - legal-network
+    restart: unless-stopped
+
+  # --- Application Services ---
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - "${API_GATEWAY_PORT:-8080}:8080"
+    environment:
+      - AUTH_SERVICE_HOST=auth-service
+      - AUTH_SERVICE_PORT=8080
+      - UPLOAD_SERVICE_HOST=upload-service
+      - UPLOAD_SERVICE_PORT=8080
+      - RAG_SERVICE_HOST=rag-service
+      - RAG_SERVICE_PORT=8000
+      - INGESTION_SERVICE_HOST=ingestion-service
+      - INGESTION_SERVICE_PORT=8000
+    networks:
+      - legal-network
+    depends_on:
+      - auth-service
+      - upload-service
+      - rag-service
+      - ingestion-service
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    ports:
+      - "${AUTH_SERVICE_PORT:-8081}:8080"
+    environment:
+      - DATABASE_URL=jdbc:postgresql://postgres:5432/${DB_NAME:-legal_rag_db}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+    networks:
+      - legal-network
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  upload-service:
+    build:
+      context: ./upload-service
+      dockerfile: Dockerfile
+    container_name: upload-service
+    ports:
+      - "${UPLOAD_SERVICE_PORT:-8082}:8080"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - legal-network
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  rag-service:
+    build:
+      context: ./rag-service
+      dockerfile: Dockerfile
+    container_name: rag-service
+    ports:
+      - "${RAG_SERVICE_PORT:-8000}:8000"
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - legal-network
+    depends_on:
+      - qdrant
+      - redis
+    restart: unless-stopped
+
+  ingestion-service:
+    build:
+      context: ./ingestion-service
+      dockerfile: Dockerfile
+    container_name: ingestion-service
+    ports:
+      - "${INGESTION_SERVICE_PORT:-8001}:8000"
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - legal-network
+    depends_on:
+      - qdrant
+      - redis
+    restart: unless-stopped
+
+networks:
+  legal-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  redis_data:
