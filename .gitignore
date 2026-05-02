@@ -4,6 +4,7 @@
 *.iws
 out/
 agents/
+.vscode/
 
 ### macOS / OS specific ###
 .DS_Store

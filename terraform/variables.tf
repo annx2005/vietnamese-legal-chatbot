@@ -19,3 +19,8 @@ variable "bucket_name" {
   description = "Name of the GCS bucket for document uploads"
   type        = string
 }
+
+variable "github_repo" {
+  description = "GitHub Repository for Workload Identity Federation (format: owner/repo)"
+  type        = string
+}
