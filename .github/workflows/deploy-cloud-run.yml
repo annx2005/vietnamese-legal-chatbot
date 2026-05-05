@@ -6,39 +6,39 @@ on:
       - main
     paths:
       # Khởi chạy Pipeline khi có thay đổi trong các microservices
-      - 'upload-service/**'
-      - 'ingestion-service/**'
-      - 'rag-service/**'
-      - '.github/workflows/**'
+      - "upload-service/**"
+      - "ingestion-service/**"
+      - "rag-service/**"
+      - ".github/workflows/**"
 
 env:
-  PROJECT_ID: legal-rag-chatbot-project # Hãy thay bằng Project ID thật của bạn
-  REGION: us-central1
+  PROJECT_ID: legal-chatbot-496302 # Hãy thay bằng Project ID thật của bạn
+  REGION: asia-southeast1
   ENV: prod
   # Tên Workload Identity Provider từ kết quả của lệnh terraform apply
   # Định dạng: projects/1234567890/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider
-  WIF_PROVIDER: 'projects/YOUR_PROJECT_NUMBER/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider'
+  WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider"
   # Email của Service Account đã tạo trên GCP
-  SERVICE_ACCOUNT: 'legal-rag-app-prod@legal-rag-chatbot-project.iam.gserviceaccount.com'
+  SERVICE_ACCOUNT: "legal-rag-app-prod@legal-chatbot-496302.iam.gserviceaccount.com"
 
 jobs:
   build-and-deploy:
     name: Deploy Microservices
     runs-on: ubuntu-latest
-    
+
     # Rất quan trọng để thiết lập id-token: write cho Workload Identity Federation
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     strategy:
       matrix:
         # Cấu hình tự động build và deploy nhiều services song song
-        service: 
+        service:
           - upload-service
           - ingestion-service
           - rag-service
-          
+
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -47,9 +47,9 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v2
         with:
-          token_format: 'access_token'
-          workload_identity_provider: '${{ env.WIF_PROVIDER }}'
-          service_account: '${{ env.SERVICE_ACCOUNT }}'
+          token_format: "access_token"
+          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
+          service_account: "${{ env.SERVICE_ACCOUNT }}"
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -62,13 +62,13 @@ jobs:
         run: |-
           # Định nghĩa tên image
           IMAGE_NAME="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/${{ matrix.service }}:${{ github.sha }}"
-          
+
           # Di chuyển vào thư mục của service
           cd ${{ matrix.service }}
-          
+
           # Build image
           docker build -t $IMAGE_NAME .
-          
+
           # Push image lên Artifact Registry
           docker push $IMAGE_NAME
 
@@ -76,10 +76,10 @@ jobs:
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
-          service: '${{ matrix.service }}-${{ env.ENV }}'
-          region: '${{ env.REGION }}'
-          image: '${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/${{ matrix.service }}:${{ github.sha }}'
-          flags: '--allow-unauthenticated' # Cho phép truy cập public cho API Gateway (Chỉnh sửa tùy nhu cầu bảo mật)
+          service: "${{ matrix.service }}-${{ env.ENV }}"
+          region: "${{ env.REGION }}"
+          image: "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/${{ matrix.service }}:${{ github.sha }}"
+          flags: "--allow-unauthenticated" # Cho phép truy cập public cho API Gateway (Chỉnh sửa tùy nhu cầu bảo mật)
 
       - name: Show Output URL
         run: echo "Deployed ${{ matrix.service }} to ${{ steps.deploy.outputs.url }}"
