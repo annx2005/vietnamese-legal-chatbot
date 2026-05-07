@@ -91,6 +91,14 @@ services:
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - PROJECT_ID=${PROJECT_ID}
+      - UPLOAD_BUCKET_NAME=${UPLOAD_BUCKET_NAME}
+      - PUBSUB_TOPIC_NAME=${PUBSUB_TOPIC_NAME}
+      # Truyền biến môi trường để trỏ tới file ADC được mount vào container
+      - GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/application_default_credentials.json
+    volumes:
+      # Mount file xác thực gcloud từ máy MAC của bạn vào container để chạy như thật
+      - ~/.config/gcloud/application_default_credentials.json:/tmp/keys/application_default_credentials.json:ro
     networks:
       - legal-network
     depends_on:

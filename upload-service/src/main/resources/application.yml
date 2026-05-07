@@ -16,8 +16,16 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
+  cloud:
+    gcp:
+      project-id: ${PROJECT_ID:legal-chatbot-496302}
+      storage:
+        bucket: ${UPLOAD_BUCKET_NAME:legal-rag-docs-local}
+      pubsub:
+        topic: ${PUBSUB_TOPIC_NAME:legal-document-uploaded-prod}
 
 springdoc:
+  packages-to-scan: com.example.upload_service.controller
   api-docs:
     path: /v3/api-docs
   swagger-ui:
