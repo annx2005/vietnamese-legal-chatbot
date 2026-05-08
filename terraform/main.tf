@@ -27,6 +27,20 @@ resource "google_project_iam_member" "vertex_ai_user" {
   member  = "serviceAccount:${module.app_service_account.email}"
 }
 
+# Gán quyền kết nối Cloud SQL qua IAM Auth Proxy cho App SA
+resource "google_project_iam_member" "cloudsql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${module.app_service_account.email}"
+}
+
+# 4b. Tạo Service Account riêng biệt cho quá trình CI/CD Deployment
+module "cicd_service_account" {
+  source       = "./modules/service_account"
+  account_id   = "legal-rag-cicd-${var.environment}"
+  display_name = "Legal RAG CI/CD Service Account (${var.environment})"
+}
+
 # =========================================================================
 # 5. KÍCH HOẠT CÁC API DỊCH VỤ GCP
 # =========================================================================
@@ -40,7 +54,9 @@ resource "google_project_service" "services" {
     "redis.googleapis.com",
     "secretmanager.googleapis.com",
     "artifactregistry.googleapis.com",
-    "iamcredentials.googleapis.com" # Yêu cầu cho Workload Identity
+    "iamcredentials.googleapis.com", # Yêu cầu cho Workload Identity
+    "vpcaccess.googleapis.com",      # Yêu cầu cho Serverless VPC Access
+    "compute.googleapis.com"         # Yêu cầu chung cho Network
   ])
   project            = var.project_id
   service            = each.key
@@ -157,11 +173,56 @@ resource "google_secret_manager_secret" "qdrant_api_key" {
   depends_on = [google_project_service.services]
 }
 
+# Placeholder Secret cho Qdrant URL
+resource "google_secret_manager_secret" "qdrant_url" {
+  secret_id = "qdrant-url-${var.environment}"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.services]
+}
+
 # Gán quyền đọc Secrets cho Service Account của App
 resource "google_project_iam_member" "secret_accessor" {
   project = var.project_id
   role    = "roles/secretmanager.secretAccessor"
   member  = "serviceAccount:${module.app_service_account.email}"
+}
+
+# =========================================================================
+# 10b. SERVERLESS VPC ACCESS (ĐỂ CLOUD RUN TRUY CẬP REDIS)
+# =========================================================================
+
+# Lấy default VPC Network
+data "google_compute_network" "default" {
+  name = "default"
+  depends_on = [google_project_service.services]
+}
+
+# Tạo Subnet riêng cho VPC Connector
+resource "google_compute_subnetwork" "vpc_connector_subnet" {
+  name          = "serverless-connector-sub-${var.environment}"
+  ip_cidr_range = "10.8.0.0/28"
+  region        = var.region
+  network       = data.google_compute_network.default.id
+  depends_on    = [google_project_service.services]
+}
+
+# Tạo Serverless VPC Access Connector
+resource "google_vpc_access_connector" "connector" {
+  name          = "rag-vpc-con-${var.environment}"
+  region        = var.region
+  
+  subnet {
+    name = google_compute_subnetwork.vpc_connector_subnet.name
+  }
+  
+  # Cấu hình máy chủ tối thiểu để tiết kiệm chi phí
+  machine_type = "e2-micro"
+  min_instances = 2
+  max_instances = 3
+  
+  depends_on = [google_project_service.services]
 }
 
 # =========================================================================
@@ -192,33 +253,43 @@ resource "google_iam_workload_identity_pool_provider" "github_provider" {
   }
 }
 
-# Cấp quyền cho Repo GitHub mượn vai (Assume Role) của Service Account
-# (Do policy module/resource, ta cần lấy id của service account theo format chuẩn)
-data "google_service_account" "app_sa_data" {
-  account_id = module.app_service_account.email
+# Cấp quyền cho Repo GitHub mượn vai (Assume Role) của **CI/CD Service Account**
+data "google_service_account" "cicd_sa_data" {
+  account_id = module.cicd_service_account.email
 }
 
 resource "google_service_account_iam_member" "github_actions_sa_binding" {
-  service_account_id = data.google_service_account.app_sa_data.name
+  service_account_id = data.google_service_account.cicd_sa_data.name
   role               = "roles/iam.workloadIdentityUser"
   member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github_pool.name}/attribute.repository/${var.github_repo}"
 }
 
-# Cấp thêm các quyền cần thiết để CI/CD có thể triển khai Cloud Run và đẩy ảnh Docker
+# =========================================================================
+# 12. PHÂN QUYỀN CI/CD ĐỂ DEPLOY CLOUD RUN VÀ ĐẨY DOCKER IMAGE
+# =========================================================================
+
+# CI/CD SA cần quyền Admin Cloud Run
 resource "google_project_iam_member" "cloud_run_admin" {
   project = var.project_id
   role    = "roles/run.admin"
-  member  = "serviceAccount:${module.app_service_account.email}"
+  member  = "serviceAccount:${module.cicd_service_account.email}"
 }
 
+# CI/CD SA cần quyền đẩy Image vào Artifact Registry
 resource "google_project_iam_member" "artifact_registry_writer" {
   project = var.project_id
   role    = "roles/artifactregistry.writer"
-  member  = "serviceAccount:${module.app_service_account.email}"
+  member  = "serviceAccount:${module.cicd_service_account.email}"
 }
 
-resource "google_project_iam_member" "service_account_user" {
-  project = var.project_id
-  role    = "roles/iam.serviceAccountUser"
-  member  = "serviceAccount:${module.app_service_account.email}"
+# Lấy ID chuẩn của App SA để cấp quyền gắn vào Cloud Run
+data "google_service_account" "app_sa_data" {
+  account_id = module.app_service_account.email
+}
+
+# Chỉ cho phép CI/CD SA được "mượn" App SA để gắn vào Cloud Run, không được dùng SA khác (Resource-level)
+resource "google_service_account_iam_member" "cicd_can_act_as_app_sa" {
+  service_account_id = data.google_service_account.app_sa_data.name
+  role               = "roles/iam.serviceAccountUser"
+  member             = "serviceAccount:${module.cicd_service_account.email}"
 }
