@@ -15,11 +15,11 @@ env:
   PROJECT_ID: legal-chatbot-496302 # Hãy thay bằng Project ID thật của bạn
   REGION: asia-southeast1
   ENV: prod
-  # Tên Workload Identity Provider từ kết quả của lệnh terraform apply
-  # Định dạng: projects/1234567890/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider
+  # Các biến dưới đây lấy từ kết quả lệnh `terraform apply` (phần Outputs)
   WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider"
-  # Email của Service Account đã tạo trên GCP
-  SERVICE_ACCOUNT: "legal-rag-app-prod@legal-chatbot-496302.iam.gserviceaccount.com"
+  CICD_SERVICE_ACCOUNT: "legal-rag-cicd-prod@legal-chatbot-496302.iam.gserviceaccount.com"
+  APP_SERVICE_ACCOUNT: "legal-rag-app-prod@legal-chatbot-496302.iam.gserviceaccount.com"
+  VPC_CONNECTOR: "projects/legal-chatbot-496302/locations/asia-southeast1/connectors/rag-vpc-con-prod"
 
 jobs:
   build-and-deploy:
@@ -49,7 +49,7 @@ jobs:
         with:
           token_format: "access_token"
           workload_identity_provider: "${{ env.WIF_PROVIDER }}"
-          service_account: "${{ env.SERVICE_ACCOUNT }}"
+          service_account: "${{ env.CICD_SERVICE_ACCOUNT }}"
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -79,7 +79,10 @@ jobs:
           service: "${{ matrix.service }}-${{ env.ENV }}"
           region: "${{ env.REGION }}"
           image: "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/${{ matrix.service }}:${{ github.sha }}"
-          flags: "--allow-unauthenticated" # Cho phép truy cập public cho API Gateway (Chỉnh sửa tùy nhu cầu bảo mật)
+          flags: >-
+            --allow-unauthenticated
+            --service-account=${{ env.APP_SERVICE_ACCOUNT }}
+            --vpc-connector=${{ env.VPC_CONNECTOR }}
 
       - name: Show Output URL
         run: echo "Deployed ${{ matrix.service }} to ${{ steps.deploy.outputs.url }}"
