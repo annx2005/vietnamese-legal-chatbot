@@ -51,11 +51,9 @@ resource "google_project_service" "services" {
     "aiplatform.googleapis.com",
     "run.googleapis.com",
     "sqladmin.googleapis.com",
-    "redis.googleapis.com",
     "secretmanager.googleapis.com",
     "artifactregistry.googleapis.com",
     "iamcredentials.googleapis.com", # Yêu cầu cho Workload Identity
-    "vpcaccess.googleapis.com",      # Yêu cầu cho Serverless VPC Access
     "compute.googleapis.com"         # Yêu cầu chung cho Network
   ])
   project            = var.project_id
@@ -137,18 +135,7 @@ resource "google_sql_user" "users" {
 }
 
 # =========================================================================
-# 9. REDIS MEMORYSTORE (LƯU CHAT HISTORY)
-# =========================================================================
-resource "google_redis_instance" "cache" {
-  name           = "legal-rag-cache-${var.environment}"
-  tier           = "BASIC" # Cấu hình Basic không có HA, tiết kiệm tiền
-  memory_size_gb = 1
-  region         = var.region
-  depends_on     = [google_project_service.services]
-}
-
-# =========================================================================
-# 10. SECRET MANAGER (LƯU TRỮ KEYS & PASSWORD)
+# 9. SECRET MANAGER (LƯU TRỮ KEYS & PASSWORD)
 # =========================================================================
 # Tự động lưu Password Database vào Secret Manager
 resource "google_secret_manager_secret" "db_password_secret" {
@@ -190,43 +177,7 @@ resource "google_project_iam_member" "secret_accessor" {
 }
 
 # =========================================================================
-# 10b. SERVERLESS VPC ACCESS (ĐỂ CLOUD RUN TRUY CẬP REDIS)
-# =========================================================================
-
-# Lấy default VPC Network
-data "google_compute_network" "default" {
-  name = "default"
-  depends_on = [google_project_service.services]
-}
-
-# Tạo Subnet riêng cho VPC Connector
-resource "google_compute_subnetwork" "vpc_connector_subnet" {
-  name          = "serverless-connector-sub-${var.environment}"
-  ip_cidr_range = "10.8.0.0/28"
-  region        = var.region
-  network       = data.google_compute_network.default.id
-  depends_on    = [google_project_service.services]
-}
-
-# Tạo Serverless VPC Access Connector
-resource "google_vpc_access_connector" "connector" {
-  name          = "rag-vpc-con-${var.environment}"
-  region        = var.region
-  
-  subnet {
-    name = google_compute_subnetwork.vpc_connector_subnet.name
-  }
-  
-  # Cấu hình máy chủ tối thiểu để tiết kiệm chi phí
-  machine_type = "e2-micro"
-  min_instances = 2
-  max_instances = 3
-  
-  depends_on = [google_project_service.services]
-}
-
-# =========================================================================
-# 11. WORKLOAD IDENTITY FEDERATION (GCP -> GITHUB ACTIONS)
+# 10. WORKLOAD IDENTITY FEDERATION (GCP -> GITHUB ACTIONS)
 # =========================================================================
 resource "google_iam_workload_identity_pool" "github_pool" {
   workload_identity_pool_id = "github-actions-pool-${var.environment}"
@@ -265,7 +216,7 @@ resource "google_service_account_iam_member" "github_actions_sa_binding" {
 }
 
 # =========================================================================
-# 12. PHÂN QUYỀN CI/CD ĐỂ DEPLOY CLOUD RUN VÀ ĐẨY DOCKER IMAGE
+# 11. PHÂN QUYỀN CI/CD ĐỂ DEPLOY CLOUD RUN VÀ ĐẨY DOCKER IMAGE
 # =========================================================================
 
 # CI/CD SA cần quyền Admin Cloud Run

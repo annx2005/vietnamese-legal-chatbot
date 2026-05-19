@@ -6,5 +6,5 @@ variable "bucket_name" {
 variable "location" {
   description = "Vị trí đặt bucket"
   type        = string
-  default     = "us-central1"
+  default     = "asia-southeast1"
 }

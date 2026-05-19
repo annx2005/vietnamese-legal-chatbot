@@ -18,21 +18,6 @@ output "wif_provider_name" {
   value       = google_iam_workload_identity_pool_provider.github_provider.name
 }
 
-output "vpc_connector_id" {
-  description = "ID của VPC Connector dùng cho Cloud Run để kết nối Redis"
-  value       = google_vpc_access_connector.connector.id
-}
-
-output "redis_host" {
-  description = "IP Host của Redis Memorystore"
-  value       = google_redis_instance.cache.host
-}
-
-output "redis_port" {
-  description = "Port của Redis Memorystore"
-  value       = google_redis_instance.cache.port
-}
-
 output "db_connection_name" {
   description = "Connection Name của Cloud SQL (dùng cho Cloud SQL Auth Proxy)"
   value       = google_sql_database_instance.metadata_db.connection_name
