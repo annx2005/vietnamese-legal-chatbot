@@ -6,6 +6,7 @@ on:
       - main
     paths:
       # Khởi chạy Pipeline khi có thay đổi trong các microservices
+      - "auth-service/**"
       - "upload-service/**"
       - "ingestion-service/**"
       - "rag-service/**"
@@ -19,7 +20,6 @@ env:
   WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider"
   CICD_SERVICE_ACCOUNT: "legal-rag-cicd-prod@legal-chatbot-496302.iam.gserviceaccount.com"
   APP_SERVICE_ACCOUNT: "legal-rag-app-prod@legal-chatbot-496302.iam.gserviceaccount.com"
-  VPC_CONNECTOR: "projects/legal-chatbot-496302/locations/asia-southeast1/connectors/rag-vpc-con-prod"
 
 jobs:
   build-and-deploy:
@@ -35,6 +35,7 @@ jobs:
       matrix:
         # Cấu hình tự động build và deploy nhiều services song song
         service:
+          - auth-service
           - upload-service
           - ingestion-service
           - rag-service
@@ -82,7 +83,6 @@ jobs:
           flags: >-
             --allow-unauthenticated
             --service-account=${{ env.APP_SERVICE_ACCOUNT }}
-            --vpc-connector=${{ env.VPC_CONNECTOR }}
 
       - name: Show Output URL
         run: echo "Deployed ${{ matrix.service }} to ${{ steps.deploy.outputs.url }}"
