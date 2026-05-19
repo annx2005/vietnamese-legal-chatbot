@@ -83,6 +83,7 @@ jobs:
           flags: >-
             --allow-unauthenticated
             --service-account=${{ env.APP_SERVICE_ACCOUNT }}
+            --clear-vpc-connector
 
       - name: Show Output URL
         run: echo "Deployed ${{ matrix.service }} to ${{ steps.deploy.outputs.url }}"
