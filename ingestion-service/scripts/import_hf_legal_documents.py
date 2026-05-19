@@ -27,6 +27,7 @@ DOMAIN_KEYWORDS = {
 }
 
 VERTEX_EMBEDDINGS = VertexAIEmbeddingService()
+VERTEX_EMBEDDINGS_AVAILABLE = True
 
 
 def normalize_text(value: object) -> str:
@@ -50,6 +51,11 @@ def create_embedding(text: str) -> List[float]:
 
 
 def create_embeddings(texts: Sequence[str], allow_local_fallback: bool) -> List[List[float]]:
+    global VERTEX_EMBEDDINGS_AVAILABLE
+
+    if not VERTEX_EMBEDDINGS_AVAILABLE:
+        return [create_embedding(text) for text in texts]
+
     try:
         vectors = VERTEX_EMBEDDINGS.embed_texts(list(texts))
         if len(vectors) == len(texts):
@@ -57,6 +63,7 @@ def create_embeddings(texts: Sequence[str], allow_local_fallback: bool) -> List[
     except Exception as exc:
         if not allow_local_fallback:
             raise RuntimeError("Vertex embedding failed. Re-run with --allow-local-embedding-fallback to import offline.") from exc
+        VERTEX_EMBEDDINGS_AVAILABLE = False
         print(f"Vertex embedding failed, falling back to local embeddings: {exc}", file=sys.stderr)
     return [create_embedding(text) for text in texts]
 
