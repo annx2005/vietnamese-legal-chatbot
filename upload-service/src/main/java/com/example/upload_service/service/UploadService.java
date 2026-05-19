@@ -77,7 +77,8 @@ public class UploadService {
 
         try {
             // 2. Upload to Google Cloud Storage
-            String generatedFileName = UUID.randomUUID().toString() + "_" + originalFilename;
+            String documentId = "doc_" + UUID.randomUUID().toString().replace("-", "");
+            String generatedFileName = documentId + "_" + originalFilename;
             BlobId blobId = BlobId.of(bucketName, generatedFileName);
             BlobInfo blobInfo = BlobInfo.newBuilder(blobId)
                     .setContentType(file.getContentType())
@@ -110,10 +111,12 @@ public class UploadService {
 
             // 4. Return response
             return UploadResponse.builder()
+                    .documentId(documentId)
                     .fileName(originalFilename)
                     .fileSize(file.getSize())
                     .fileType(file.getContentType())
                     .uploadStatus("SUCCESS")
+                    .ingestionStatus("QUEUED")
                     .fileUrl(gcsUrl)
                     .build();
 

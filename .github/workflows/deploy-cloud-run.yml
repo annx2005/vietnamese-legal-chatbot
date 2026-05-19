@@ -33,12 +33,23 @@ jobs:
 
     strategy:
       matrix:
-        # Cấu hình tự động build và deploy nhiều services song song
-        service:
-          - auth-service
-          - upload-service
-          - ingestion-service
-          - rag-service
+        include:
+          - service: auth-service
+            cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
+            env_vars: "DATABASE_URL=jdbc:postgresql:///metadata_db?socketFactory=org.postgresql.ssl.NonValidatingFactory&socketFactoryArg=/cloudsql/legal-chatbot-496302:asia-southeast1:legal-rag-db-prod,DB_USER=legal_app_user"
+            secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest"
+          - service: upload-service
+            cloudsql: ""
+            env_vars: ""
+            secrets: ""
+          - service: ingestion-service
+            cloudsql: ""
+            env_vars: ""
+            secrets: ""
+          - service: rag-service
+            cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
+            env_vars: "DATABASE_URL=postgresql+psycopg2://legal_app_user:DB_PASSWORD_PLACEHOLDER@/metadata_db?host=/cloudsql/legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
+            secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest"
 
     steps:
       - name: Checkout Source Code
@@ -84,6 +95,9 @@ jobs:
             --allow-unauthenticated
             --service-account=${{ env.APP_SERVICE_ACCOUNT }}
             --clear-vpc-connector
+            ${{ matrix.cloudsql != '' && format('--add-cloudsql-instances={0}', matrix.cloudsql) || '' }}
+            ${{ matrix.env_vars != '' && format('--set-env-vars={0}', matrix.env_vars) || '' }}
+            ${{ matrix.secrets != '' && format('--set-secrets={0}', matrix.secrets) || '' }}
 
       - name: Show Output URL
         run: echo "Deployed ${{ matrix.service }} to ${{ steps.deploy.outputs.url }}"

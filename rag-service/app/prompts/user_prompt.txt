@@ -1,0 +1,10 @@
+Câu hỏi của người dùng:
+{query}
+
+Ngữ cảnh truy xuất:
+{retrieved_context}
+
+Yêu cầu:
+- Trả lời chỉ dựa trên ngữ cảnh ở trên.
+- Nếu ngữ cảnh mâu thuẫn hoặc chưa đủ, hãy nói rõ mức độ không chắc chắn.
+- Không thêm căn cứ pháp lý mới ngoài phần ngữ cảnh.

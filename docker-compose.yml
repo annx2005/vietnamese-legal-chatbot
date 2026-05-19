@@ -27,34 +27,36 @@ services:
       - legal-network
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    container_name: local-redis
+  # --- Application Services ---
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: legal-rag-frontend
     ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      - VITE_API_PROXY_TARGET=http://api-gateway:8080
     networks:
       - legal-network
+    depends_on:
+      - api-gateway
     restart: unless-stopped
 
-  # --- Application Services ---
   api-gateway:
-    build:
-      context: ./api-gateway
-      dockerfile: Dockerfile
+    image: kong:3.8
     container_name: api-gateway
     ports:
       - "${API_GATEWAY_PORT:-8080}:8080"
+      - "${KONG_ADMIN_PORT:-18001}:8001"
     environment:
-      - AUTH_SERVICE_HOST=auth-service
-      - AUTH_SERVICE_PORT=8080
-      - UPLOAD_SERVICE_HOST=upload-service
-      - UPLOAD_SERVICE_PORT=8080
-      - RAG_SERVICE_HOST=rag-service
-      - RAG_SERVICE_PORT=8000
-      - INGESTION_SERVICE_HOST=ingestion-service
-      - INGESTION_SERVICE_PORT=8000
+      - KONG_DATABASE=off
+      - KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml
+      - KONG_PROXY_LISTEN=0.0.0.0:8080
+      - KONG_ADMIN_LISTEN=0.0.0.0:8001
+      - KONG_LOG_LEVEL=info
+    volumes:
+      - ./kong-gateway/kong.yml:/kong/declarative/kong.yml:ro
     networks:
       - legal-network
     depends_on:
@@ -75,6 +77,10 @@ services:
       - DATABASE_URL=jdbc:postgresql://postgres:5432/${DB_NAME:-legal_rag_db}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin123}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
+      - JWT_EXPIRATION_TIME=${JWT_EXPIRATION_TIME:-86400}
     networks:
       - legal-network
     depends_on:
@@ -89,11 +95,10 @@ services:
     ports:
       - "${UPLOAD_SERVICE_PORT:-8082}:8080"
     environment:
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
       - PROJECT_ID=${PROJECT_ID}
       - UPLOAD_BUCKET_NAME=${UPLOAD_BUCKET_NAME}
       - PUBSUB_TOPIC_NAME=${PUBSUB_TOPIC_NAME}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
       # Truyền biến môi trường để trỏ tới file ADC được mount vào container
       - GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/application_default_credentials.json
     volumes:
@@ -101,8 +106,6 @@ services:
       - ~/.config/gcloud/application_default_credentials.json:/tmp/keys/application_default_credentials.json:ro
     networks:
       - legal-network
-    depends_on:
-      - redis
     restart: unless-stopped
 
   rag-service:
@@ -113,15 +116,23 @@ services:
     ports:
       - "${RAG_SERVICE_PORT:-8000}:8000"
     environment:
+      - GCP_PROJECT_ID=${PROJECT_ID}
+      - GCP_LOCATION=${GCP_REGION:-asia-southeast1}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - COLLECTION_NAME=${COLLECTION_NAME:-legal_documents}
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-text-embedding-005}
+      - LLM_MODEL_NAME=${LLM_MODEL_NAME:-gemini-2.5-flash}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-legal_rag_db}
+      - GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/application_default_credentials.json
+    volumes:
+      - ~/.config/gcloud/application_default_credentials.json:/tmp/keys/application_default_credentials.json:ro
     networks:
       - legal-network
     depends_on:
       - qdrant
-      - redis
+      - postgres
     restart: unless-stopped
 
   ingestion-service:
@@ -134,13 +145,19 @@ services:
     environment:
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - COLLECTION_NAME=${COLLECTION_NAME:-legal_documents}
+      - GCP_PROJECT_ID=${PROJECT_ID}
+      - GCP_LOCATION=${GCP_REGION:-asia-southeast1}
+      - GCS_BUCKET_NAME=${UPLOAD_BUCKET_NAME}
+      - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-text-embedding-005}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
+      - GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/application_default_credentials.json
+    volumes:
+      - ~/.config/gcloud/application_default_credentials.json:/tmp/keys/application_default_credentials.json:ro
     networks:
       - legal-network
     depends_on:
       - qdrant
-      - redis
     restart: unless-stopped
 
 networks:
@@ -150,4 +167,3 @@ networks:
 volumes:
   postgres_data:
   qdrant_data:
-  redis_data:

@@ -1,13 +1,26 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "RAG Service API"
+    GCP_PROJECT_ID: str = "legal-rag-project"
+    GCP_LOCATION: str = "asia-southeast1"
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_API_KEY: str = ""
     COLLECTION_NAME: str = "legal_documents"
-    EMBEDDING_MODEL_NAME: str = "textembedding-gecko@003"
-    LLM_MODEL_NAME: str = "gemini-1.5-pro-preview-0409"
+    EMBEDDING_MODEL_NAME: str = "text-embedding-005"
+    LLM_MODEL_NAME: str = "gemini-2.5-flash"
+    VECTOR_SIZE: int = 384
+    CONFIDENCE_THRESHOLD: float = 0.18
+    LLM_TEMPERATURE: float = 0.2
+    LLM_MAX_OUTPUT_TOKENS: int = 1024
+    JWT_SECRET_KEY: str = "super-secret-jwt-key-change-in-production"
+    DEFAULT_DISCLAIMER: str = "Thông tin chỉ dùng để tham khảo, không thay thế tư vấn của luật sư hoặc cơ quan có thẩm quyền."
+    SYSTEM_PROMPT_PATH: str = str(Path(__file__).resolve().parents[1] / "prompts" / "system_prompt.txt")
+    USER_PROMPT_PATH: str = str(Path(__file__).resolve().parents[1] / "prompts" / "user_prompt.txt")
+    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/legal_rag_db"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

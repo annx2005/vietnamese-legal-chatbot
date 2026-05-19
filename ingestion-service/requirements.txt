@@ -1,8 +1,10 @@
 fastapi
 uvicorn
+google-cloud-aiplatform
 google-cloud-pubsub
 google-cloud-storage
 pdfplumber
 pydantic-settings
 httpx
-redis
+qdrant-client
+datasets

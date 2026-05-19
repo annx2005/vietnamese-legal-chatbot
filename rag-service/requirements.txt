@@ -6,4 +6,5 @@ google-cloud-aiplatform
 langchain
 pydantic-settings
 httpx
-redis
+sqlalchemy
+psycopg2-binary
