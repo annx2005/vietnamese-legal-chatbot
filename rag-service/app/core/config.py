@@ -20,7 +20,13 @@ class Settings(BaseSettings):
     DEFAULT_DISCLAIMER: str = "Thông tin chỉ dùng để tham khảo, không thay thế tư vấn của luật sư hoặc cơ quan có thẩm quyền."
     SYSTEM_PROMPT_PATH: str = str(Path(__file__).resolve().parents[1] / "prompts" / "system_prompt.txt")
     USER_PROMPT_PATH: str = str(Path(__file__).resolve().parents[1] / "prompts" / "user_prompt.txt")
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/legal_rag_db"
+    DATABASE_URL: str | None = None
+    DB_USER: str = "postgres"
+    DB_PASSWORD: str = "postgres"
+    DB_NAME: str = "legal_rag_db"
+    DB_HOST: str = "localhost"
+    DB_PORT: int = 5432
+    CLOUD_SQL_CONNECTION_NAME: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
