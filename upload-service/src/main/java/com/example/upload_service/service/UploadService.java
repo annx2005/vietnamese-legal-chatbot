@@ -52,8 +52,12 @@ public class UploadService {
             this.publisher = Publisher.newBuilder(topicName).build();
             log.info("Initialized Google Cloud Pub/Sub publisher for topic: {}", topicName.toString());
         } catch (IOException e) {
-            log.error("Failed to initialize GCP clients", e);
-            throw new RuntimeException("Could not initialize GCP clients", e);
+            this.storage = null;
+            this.publisher = null;
+            log.warn(
+                    "GCP clients are unavailable. Upload API will stay up, but PDF upload is disabled until valid ADC or a service account key is mounted.",
+                    e
+            );
         }
     }
 
@@ -65,6 +69,11 @@ public class UploadService {
     }
 
     public UploadResponse uploadFile(MultipartFile file) {
+        if (storage == null || publisher == null) {
+            throw new RuntimeException(
+                    "Google Cloud clients are not initialized. Run gcloud auth application-default login or mount a valid JSON credential into the configured container path."
+            );
+        }
         if (file.isEmpty()) {
             throw new RuntimeException("Cannot upload empty file");
         }

@@ -62,6 +62,7 @@ override.tf.json
 .terraform.lock.hcl
 
 ### GCP / Secrets / Keys ###
+.secrets/
 **/*.key
 **/*.pem
 **/*secret*.json

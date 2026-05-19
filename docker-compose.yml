@@ -1,5 +1,5 @@
 services:
-  # --- Infrastructure Services (Local Dev Only) ---
+  # Infrastructure services
   postgres:
     image: postgres:16-alpine
     container_name: local-postgres
@@ -27,7 +27,7 @@ services:
       - legal-network
     restart: unless-stopped
 
-  # --- Application Services ---
+  # Application services
   frontend:
     build:
       context: ./frontend
@@ -99,11 +99,12 @@ services:
       - UPLOAD_BUCKET_NAME=${UPLOAD_BUCKET_NAME}
       - PUBSUB_TOPIC_NAME=${PUBSUB_TOPIC_NAME}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
-      # Truyền biến môi trường để trỏ tới file ADC được mount vào container
-      - GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/application_default_credentials.json
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/var/run/gcp/application_default_credentials.json}
     volumes:
-      # Mount file xác thực gcloud từ máy MAC của bạn vào container để chạy như thật
-      - ~/.config/gcloud/application_default_credentials.json:/tmp/keys/application_default_credentials.json:ro
+      - type: bind
+        source: ${GCP_CREDENTIALS_DIR:-./.secrets/gcp}
+        target: /var/run/gcp
+        read_only: true
     networks:
       - legal-network
     restart: unless-stopped
@@ -125,9 +126,12 @@ services:
       - LLM_MODEL_NAME=${LLM_MODEL_NAME:-gemini-2.5-flash}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-legal_rag_db}
-      - GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/application_default_credentials.json
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/var/run/gcp/application_default_credentials.json}
     volumes:
-      - ~/.config/gcloud/application_default_credentials.json:/tmp/keys/application_default_credentials.json:ro
+      - type: bind
+        source: ${GCP_CREDENTIALS_DIR:-./.secrets/gcp}
+        target: /var/run/gcp
+        read_only: true
     networks:
       - legal-network
     depends_on:
@@ -151,9 +155,12 @@ services:
       - GCS_BUCKET_NAME=${UPLOAD_BUCKET_NAME}
       - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-text-embedding-005}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
-      - GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/application_default_credentials.json
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/var/run/gcp/application_default_credentials.json}
     volumes:
-      - ~/.config/gcloud/application_default_credentials.json:/tmp/keys/application_default_credentials.json:ro
+      - type: bind
+        source: ${GCP_CREDENTIALS_DIR:-./.secrets/gcp}
+        target: /var/run/gcp
+        read_only: true
     networks:
       - legal-network
     depends_on:
