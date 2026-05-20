@@ -61,10 +61,10 @@ jobs:
             --image="${{ steps.image.outputs.image }}"
             --service-account="${{ env.APP_SERVICE_ACCOUNT }}"
             --set-cloudsql-instances="${{ env.CLOUD_SQL_INSTANCE }}"
-            --set-env-vars="GCP_PROJECT_ID=${{ env.PROJECT_ID }},GCP_LOCATION=${{ env.REGION }},GCS_BUCKET_NAME=vietnamese-legal-rag-documents,PUBSUB_TOPIC=legal-document-uploaded-prod,CLOUD_SQL_CONNECTION_NAME=${{ env.CLOUD_SQL_INSTANCE }},DB_USER=legal_app_user,DB_NAME=metadata_db,COLLECTION_NAME=${{ env.COLLECTION_NAME }},EMBEDDING_MODEL_NAME=text-embedding-005"
+            --set-env-vars="GCP_PROJECT_ID=${{ env.PROJECT_ID }},GCP_LOCATION=${{ env.REGION }},GCS_BUCKET_NAME=vietnamese-legal-rag-documents,PUBSUB_TOPIC=legal-document-uploaded-prod,CLOUD_SQL_CONNECTION_NAME=${{ env.CLOUD_SQL_INSTANCE }},DB_USER=legal_app_user,DB_NAME=metadata_db,COLLECTION_NAME=${{ env.COLLECTION_NAME }},EMBEDDING_MODEL_NAME=text-embedding-005,PYTHONUNBUFFERED=1"
             --set-secrets="DB_PASSWORD=legal-rag-db-password-prod:latest,QDRANT_URL=qdrant-url-prod:latest,QDRANT_API_KEY=qdrant-api-key-prod:latest"
             --command=python
-            --args="${ARGS}"
+            --args="-u,${ARGS},--batch-size,8,--embedding-batch-size,2"
             --task-timeout=3600s
             --memory=4Gi
             --cpu=2

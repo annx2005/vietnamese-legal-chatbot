@@ -7,7 +7,7 @@ import unicodedata
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Sequence
+from typing import Dict, Iterable, Iterator, List, Sequence
 
 from datasets import load_dataset
 from qdrant_client import QdrantClient
@@ -72,12 +72,10 @@ def create_embeddings(texts: Sequence[str], allow_local_fallback: bool) -> List[
     return [create_embedding(text) for text in texts]
 
 
-def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
+def iter_chunks(text: str, chunk_size: int, chunk_overlap: int) -> Iterator[str]:
     normalized = re.sub(r"[ \t]+", " ", text)
     normalized = re.sub(r"\n{3,}", "\n\n", normalized).strip()
     paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", normalized) if paragraph.strip()]
-
-    chunks: List[str] = []
     current = ""
     for paragraph in paragraphs:
         if len(current) + len(paragraph) + 2 <= chunk_size:
@@ -85,19 +83,18 @@ def chunk_text(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
             continue
 
         if current:
-            chunks.append(current)
+            yield current
         if len(paragraph) <= chunk_size:
             current = paragraph
             continue
 
         step = max(chunk_size - chunk_overlap, 1)
         for start in range(0, len(paragraph), step):
-            chunks.append(paragraph[start : start + chunk_size])
+            yield paragraph[start : start + chunk_size]
         current = ""
 
     if current:
-        chunks.append(current)
-    return chunks
+        yield current
 
 
 def matches_domains(metadata: dict, domains: Sequence[str]) -> bool:
@@ -173,6 +170,17 @@ def batched(items: Iterable[PointStruct], batch_size: int) -> Iterable[List[Poin
         yield batch
 
 
+def batched_texts(items: Iterable[str], batch_size: int) -> Iterable[List[str]]:
+    batch: List[str] = []
+    for item in items:
+        batch.append(item)
+        if len(batch) >= batch_size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
 def make_document_points(
     document_id: int,
     metadata: dict,
@@ -182,14 +190,14 @@ def make_document_points(
     embedding_batch_size: int,
     allow_local_fallback: bool,
 ) -> Iterable[PointStruct]:
-    chunks = chunk_text(text, chunk_size, chunk_overlap)
-    for batch_start in range(0, len(chunks), embedding_batch_size):
-        batch_chunks = chunks[batch_start : batch_start + embedding_batch_size]
+    chunk_count = 0
+    batch_size = max(embedding_batch_size, 1)
+    print(f"Processing document {document_id}: {metadata['title'][:120]}", flush=True)
+    for batch_chunks in batched_texts(iter_chunks(text, chunk_size, chunk_overlap), batch_size):
         vectors = create_embeddings(batch_chunks, allow_local_fallback)
-        for offset, (chunk, vector) in enumerate(zip(batch_chunks, vectors)):
-            chunk_index = batch_start + offset
+        for chunk, vector in zip(batch_chunks, vectors):
             article_match = re.search(r"(Điều\s+\d+[^\n.]*)", chunk, flags=re.IGNORECASE)
-            point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"hf:{document_id}:{chunk_index}"))
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"hf:{document_id}:{chunk_count}"))
             yield PointStruct(
                 id=point_id,
                 vector=vector,
@@ -207,7 +215,7 @@ def make_document_points(
                     "issuance_date": metadata["issuance_date"],
                     "effective_status": "unknown",
                     "article": article_match.group(1) if article_match else "",
-                    "chunk_index": chunk_index,
+                    "chunk_index": chunk_count,
                     "content": chunk,
                     "enabled": True,
                     "source": DATASET_NAME,
@@ -215,6 +223,8 @@ def make_document_points(
                     "embedding_provider": "vertex-ai" if not allow_local_fallback else "vertex-ai-or-local-fallback",
                 },
             )
+            chunk_count += 1
+    print(f"Finished document {document_id} with {chunk_count} chunks", flush=True)
 
 
 def make_points(
@@ -359,10 +369,11 @@ def main() -> None:
     domains = [domain.strip() for domain in args.domains.split(",") if domain.strip()]
     effective_limit = None if args.limit == 0 else args.limit
     limit_label = "all matching documents" if effective_limit is None else f"up to {effective_limit} documents"
-    print(f"Selecting {limit_label} from {DATASET_NAME} for domains: {domains or 'all'}")
+    print(f"Selecting {limit_label} from {DATASET_NAME} for domains: {domains or 'all'}", flush=True)
     metadata_by_id = select_metadata(effective_limit, domains)
     if not metadata_by_id:
         raise RuntimeError("No matching metadata rows found. Try a larger --limit or verify dataset access.")
+    print(f"Selected {len(metadata_by_id)} metadata rows", flush=True)
 
     client = QdrantClient(**qdrant_client_kwargs())
     ensure_collection(client)
@@ -383,13 +394,14 @@ def main() -> None:
             if document_id:
                 chunk_counts[document_id] = chunk_counts.get(document_id, 0) + 1
         total_points += len(batch)
-        print(f"Upserted {total_points} chunks...")
+        print(f"Upserted {total_points} chunks...", flush=True)
 
     persist_import_state(metadata_by_id, chunk_counts)
 
     print(
         f"Imported {len(metadata_by_id)} documents and {total_points} chunks "
-        f"into Qdrant collection '{settings.COLLECTION_NAME}'."
+        f"into Qdrant collection '{settings.COLLECTION_NAME}'.",
+        flush=True,
     )
 
 
