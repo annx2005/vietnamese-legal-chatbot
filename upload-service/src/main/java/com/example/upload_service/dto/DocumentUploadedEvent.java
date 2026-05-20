@@ -10,9 +10,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DocumentUploadedEvent {
+    private String documentId;
     private String fileName;
     private String originalFileName;
     private String gcsUrl;
+    private String documentType;
     private long sizeBytes;
     private String contentType;
     private long uploadedAtEpoch;

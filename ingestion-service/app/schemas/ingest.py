@@ -50,3 +50,26 @@ class AdminStatsResponse(BaseModel):
     jobs_failed: int
     jobs_processing: int
     service_status: str = Field(default="ok")
+
+
+class DocumentUploadedEvent(BaseModel):
+    documentId: str
+    fileName: str
+    originalFileName: str
+    gcsUrl: str
+    documentType: str = "PDF"
+    sizeBytes: int
+    contentType: str
+    uploadedAtEpoch: int
+
+
+class PubSubPushMessage(BaseModel):
+    data: str
+    messageId: Optional[str] = None
+    publishTime: Optional[str] = None
+    attributes: Optional[dict[str, str]] = None
+
+
+class PubSubPushEnvelope(BaseModel):
+    message: PubSubPushMessage
+    subscription: Optional[str] = None

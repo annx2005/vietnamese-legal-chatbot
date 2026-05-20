@@ -5,7 +5,7 @@ Microservice MVP for a Vietnamese legal chatbot with public chat, admin document
 ## Services
 
 - `frontend`: Vite + React app with `/chat` and `/admin`.
-- `api-gateway`: Kong Gateway entrypoint for `/api/v1/*` using declarative config in `kong-gateway/kong.yml`.
+- `api-router`: Nginx reverse proxy entrypoint for `/api/v1/*` in both local and Cloud Run.
 - `upload-service`: uploads PDF files to GCS and returns document metadata.
 - `ingestion-service`: reads PDF/text, chunks content, creates Vertex AI embeddings, and upserts chunks into Qdrant.
 - `rag-service`: retrieves legal chunks from Qdrant, calls Gemini to draft grounded answers, and returns citations with confidence fallback.
@@ -21,8 +21,7 @@ Open:
 
 - Chat: `http://localhost:5173/chat`
 - Admin: `http://localhost:5173/admin`
-- API Gateway: `http://localhost:8080`
-- Kong Admin API: `http://localhost:18001`
+- API Router: `http://localhost:8080`
 - RAG docs: `http://localhost:8000/docs`
 - Ingestion docs: `http://localhost:8001/docs`
 

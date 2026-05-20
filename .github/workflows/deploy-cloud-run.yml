@@ -5,11 +5,13 @@ on:
     branches:
       - main
     paths:
-      # Khởi chạy Pipeline khi có thay đổi trong các microservices
+      # Khởi chạy pipeline khi có thay đổi trong các services chạy trên Cloud Run
       - "auth-service/**"
       - "upload-service/**"
       - "ingestion-service/**"
       - "rag-service/**"
+      - "api-router/**"
+      - "frontend/**"
       - ".github/workflows/**"
 
 env:
@@ -22,11 +24,10 @@ env:
   APP_SERVICE_ACCOUNT: "legal-rag-app-prod@legal-chatbot-496302.iam.gserviceaccount.com"
 
 jobs:
-  build-and-deploy:
-    name: Deploy Microservices
+  deploy-backends:
+    name: Deploy Backend Services
     runs-on: ubuntu-latest
 
-    # Rất quan trọng để thiết lập id-token: write cho Workload Identity Federation
     permissions:
       contents: "read"
       id-token: "write"
@@ -72,16 +73,9 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |-
-          # Định nghĩa tên image
           IMAGE_NAME="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/${{ matrix.service }}:${{ github.sha }}"
-
-          # Di chuyển vào thư mục của service
           cd ${{ matrix.service }}
-
-          # Build image
           docker build -t $IMAGE_NAME .
-
-          # Push image lên Artifact Registry
           docker push $IMAGE_NAME
 
       - name: Deploy to Cloud Run
@@ -102,3 +96,144 @@ jobs:
 
       - name: Show Output URL
         run: echo "Deployed ${{ matrix.service }} to ${{ steps.deploy.outputs.url }}"
+
+  configure-ingestion-subscription:
+    name: Configure Ingestion Subscription
+    runs-on: ubuntu-latest
+    needs: deploy-backends
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: Google Auth (Workload Identity Federation)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
+          service_account: "${{ env.CICD_SERVICE_ACCOUNT }}"
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve Ingestion URL
+        id: ingestion-url
+        run: echo "url=$(gcloud run services describe ingestion-service-${{ env.ENV }} --region=${{ env.REGION }} --format='value(status.url)')" >> "$GITHUB_OUTPUT"
+
+      - name: Configure Pub/Sub Push Subscription
+        run: |-
+          gcloud pubsub subscriptions update legal-document-ingestion-sub-${{ env.ENV }} \
+            --push-endpoint="${{ steps.ingestion-url.outputs.url }}/api/v1/ingest/events/document-uploaded"
+
+  deploy-api-router:
+    name: Deploy API Router
+    runs-on: ubuntu-latest
+    needs: configure-ingestion-subscription
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Google Auth (Workload Identity Federation)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
+          service_account: "${{ env.CICD_SERVICE_ACCOUNT }}"
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Docker Auth to Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Resolve Backend URLs
+        id: backend-urls
+        run: |-
+          echo "auth_url=$(gcloud run services describe auth-service-${{ env.ENV }} --region=${{ env.REGION }} --format='value(status.url)')" >> "$GITHUB_OUTPUT"
+          echo "upload_url=$(gcloud run services describe upload-service-${{ env.ENV }} --region=${{ env.REGION }} --format='value(status.url)')" >> "$GITHUB_OUTPUT"
+          echo "ingestion_url=$(gcloud run services describe ingestion-service-${{ env.ENV }} --region=${{ env.REGION }} --format='value(status.url)')" >> "$GITHUB_OUTPUT"
+          echo "rag_url=$(gcloud run services describe rag-service-${{ env.ENV }} --region=${{ env.REGION }} --format='value(status.url)')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and Push API Router Image
+        run: |-
+          IMAGE_NAME="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/api-router:${{ github.sha }}"
+          cd api-router
+          docker build -t $IMAGE_NAME .
+          docker push $IMAGE_NAME
+
+      - name: Deploy API Router
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: "api-router-${{ env.ENV }}"
+          region: "${{ env.REGION }}"
+          image: "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/api-router:${{ github.sha }}"
+          flags: >-
+            --allow-unauthenticated
+            --port=8080
+            --service-account=${{ env.APP_SERVICE_ACCOUNT }}
+            --set-env-vars=AUTH_SERVICE_URL=${{ steps.backend-urls.outputs.auth_url }},UPLOAD_SERVICE_URL=${{ steps.backend-urls.outputs.upload_url }},INGESTION_SERVICE_URL=${{ steps.backend-urls.outputs.ingestion_url }},RAG_SERVICE_URL=${{ steps.backend-urls.outputs.rag_url }}
+
+      - name: Show Output URL
+        run: echo "Deployed api-router to ${{ steps.deploy.outputs.url }}"
+
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    needs: deploy-api-router
+
+    permissions:
+      contents: "read"
+      id-token: "write"
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Google Auth (Workload Identity Federation)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
+          service_account: "${{ env.CICD_SERVICE_ACCOUNT }}"
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Docker Auth to Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Resolve API Router URL
+        id: api-router-url
+        run: echo "url=$(gcloud run services describe api-router-${{ env.ENV }} --region=${{ env.REGION }} --format='value(status.url)')" >> "$GITHUB_OUTPUT"
+
+      - name: Build and Push Frontend Image
+        run: |-
+          IMAGE_NAME="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/frontend:${{ github.sha }}"
+          cd frontend
+          docker build --build-arg VITE_API_BASE_URL=${{ steps.api-router-url.outputs.url }} -t $IMAGE_NAME .
+          docker push $IMAGE_NAME
+
+      - name: Deploy Frontend
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: "frontend-${{ env.ENV }}"
+          region: "${{ env.REGION }}"
+          image: "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/frontend:${{ github.sha }}"
+          flags: >-
+            --allow-unauthenticated
+            --port=8080
+            --service-account=${{ env.APP_SERVICE_ACCOUNT }}
+
+      - name: Show Output URL
+        run: echo "Deployed frontend to ${{ steps.deploy.outputs.url }}"

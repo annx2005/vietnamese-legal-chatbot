@@ -1,6 +1,7 @@
 import { AuthUser, QueryResponse, DocumentRecord, IngestionJob, ChatLog } from "./types";
 
 export const AUTH_STORAGE_KEY = "legal-rag-auth-user";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 
 export function readStoredUser(): AuthUser | null {
   try {
@@ -15,6 +16,13 @@ export function readStoredToken(): string {
   return readStoredUser()?.token || "";
 }
 
+function resolveUrl(path: string): string {
+  if (/^https?:\/\//.test(path)) {
+    return path;
+  }
+  return API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = init.body instanceof FormData ? {} : { "Content-Type": "application/json" };
   if (init.headers) {
@@ -24,7 +32,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (token && !headers.Authorization) {
     headers.Authorization = `Bearer ${token}`;
   }
-  const response = await fetch(path, { ...init, headers });
+  const response = await fetch(resolveUrl(path), { ...init, headers });
   if (!response.ok) {
     const text = await response.text();
     let message = text;

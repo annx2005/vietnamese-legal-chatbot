@@ -105,9 +105,11 @@ public class UploadService {
 
             // 3. Publish message to Pub/Sub
             DocumentUploadedEvent event = DocumentUploadedEvent.builder()
+                    .documentId(documentId)
                     .fileName(generatedFileName)
                     .originalFileName(originalFilename)
                     .gcsUrl(gcsUrl)
+                    .documentType("PDF")
                     .sizeBytes(file.getSize())
                     .contentType(file.getContentType())
                     .uploadedAtEpoch(Instant.now().toEpochMilli())

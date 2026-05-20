@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import require_admin
@@ -7,6 +7,7 @@ from app.schemas.ingest import (
     AdminStatsResponse,
     DocumentListResponse,
     DocumentRecord,
+    PubSubPushEnvelope,
     IngestRequest,
     IngestResponse,
     JobListResponse,
@@ -25,6 +26,27 @@ async def start_ingestion(
     service: IngestionService = Depends(get_ingestion_service),
 ):
     return await service.trigger_ingestion(request)
+
+
+@router.post(
+    "/events/document-uploaded",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Pub/Sub push endpoint for uploaded document events",
+)
+async def handle_uploaded_document_event(
+    envelope: PubSubPushEnvelope,
+    service: IngestionService = Depends(get_ingestion_service),
+):
+    try:
+        response = await service.trigger_pubsub_ingestion(envelope)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {
+        "status": "accepted",
+        "document_id": response.document_id,
+        "task_id": response.task_id,
+        "chunks_indexed": response.chunks_indexed,
+    }
 
 @router.get("/jobs", response_model=JobListResponse, summary="Danh sách job ingestion")
 async def list_jobs(_: None = Depends(require_admin), service: IngestionService = Depends(get_ingestion_service)):

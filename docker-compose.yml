@@ -32,31 +32,30 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: dev
     container_name: legal-rag-frontend
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
     environment:
-      - VITE_API_PROXY_TARGET=http://api-gateway:8080
+      - VITE_API_PROXY_TARGET=http://api-router:8080
     networks:
       - legal-network
     depends_on:
-      - api-gateway
+      - api-router
     restart: unless-stopped
 
-  api-gateway:
-    image: kong:3.8
-    container_name: api-gateway
+  api-router:
+    build:
+      context: ./api-router
+      dockerfile: Dockerfile
+    container_name: api-router
     ports:
-      - "${API_GATEWAY_PORT:-8080}:8080"
-      - "${KONG_ADMIN_PORT:-18001}:8001"
+      - "${API_ROUTER_PORT:-8080}:8080"
     environment:
-      - KONG_DATABASE=off
-      - KONG_DECLARATIVE_CONFIG=/kong/declarative/kong.yml
-      - KONG_PROXY_LISTEN=0.0.0.0:8080
-      - KONG_ADMIN_LISTEN=0.0.0.0:8001
-      - KONG_LOG_LEVEL=info
-    volumes:
-      - ./kong-gateway/kong.yml:/kong/declarative/kong.yml:ro
+      - AUTH_SERVICE_URL=http://auth-service:8080
+      - UPLOAD_SERVICE_URL=http://upload-service:8080
+      - INGESTION_SERVICE_URL=http://ingestion-service:8000
+      - RAG_SERVICE_URL=http://rag-service:8000
     networks:
       - legal-network
     depends_on:

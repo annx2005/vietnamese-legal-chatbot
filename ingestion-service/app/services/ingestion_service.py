@@ -1,7 +1,9 @@
 import hashlib
 import io
+import json
 import re
 import uuid
+from base64 import b64decode
 from datetime import datetime, timezone
 from typing import List, Optional
 from urllib.parse import urlparse
@@ -12,7 +14,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import DocumentRecordModel, IngestionJobRecord
-from app.schemas.ingest import DocumentRecord, IngestRequest, IngestResponse, IngestionJob
+from app.schemas.ingest import (
+    DocumentRecord,
+    DocumentUploadedEvent,
+    IngestRequest,
+    IngestResponse,
+    IngestionJob,
+    PubSubPushEnvelope,
+)
 from app.services.vertex_ai_service import VertexAIEmbeddingService
 
 try:
@@ -156,6 +165,20 @@ class IngestionService:
                 metadata=metadata,
             )
         )
+
+    async def trigger_pubsub_ingestion(self, envelope: PubSubPushEnvelope) -> IngestResponse:
+        event = self._decode_uploaded_event(envelope)
+        response = await self.trigger_ingestion(
+            IngestRequest(
+                file_url=event.gcsUrl,
+                document_id=event.documentId,
+                document_type=event.documentType or "PDF",
+                metadata={"title": event.originalFileName},
+            )
+        )
+        if response.status.upper() == "FAILED":
+            raise RuntimeError(response.message)
+        return response
 
     def list_jobs(self) -> List[IngestionJob]:
         if self.db is None:
@@ -399,6 +422,14 @@ class IngestionService:
         if self.db is None:
             return
         self.db.commit()
+
+    @staticmethod
+    def _decode_uploaded_event(envelope: PubSubPushEnvelope) -> DocumentUploadedEvent:
+        try:
+            payload = b64decode(envelope.message.data).decode("utf-8")
+            return DocumentUploadedEvent.model_validate(json.loads(payload))
+        except Exception as exc:
+            raise RuntimeError("Invalid Pub/Sub upload event payload") from exc
 
     @staticmethod
     def _document_to_schema(row: DocumentRecordModel) -> DocumentRecord:

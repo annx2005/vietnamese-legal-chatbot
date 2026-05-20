@@ -52,6 +52,7 @@ public class AuthService {
     }
 
     public AuthResponse login(AuthRequest request) {
+        validateCredentials(request);
         User user = userRepository.findByUsername(request.getUsername())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password"));
         if (!passwordMatches(request.getPassword(), user)) {
@@ -61,6 +62,7 @@ public class AuthService {
     }
 
     public AuthResponse register(AuthRequest request) {
+        validateCredentials(request);
         if (userRepository.findByUsername(request.getUsername()).isPresent()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already exists");
         }
@@ -71,6 +73,18 @@ public class AuthService {
         userRepository.save(user);
 
         return toAuthResponse(user, "Registration successful");
+    }
+
+    private void validateCredentials(AuthRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Request body is required");
+        }
+        if (request.getUsername() == null || request.getUsername().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username is required");
+        }
+        if (request.getPassword() == null || request.getPassword().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password is required");
+        }
     }
 
     private boolean passwordMatches(String rawPassword, User user) {
