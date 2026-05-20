@@ -22,6 +22,13 @@ from app.schemas.ingest import (
     IngestionJob,
     PubSubPushEnvelope,
 )
+from app.services.qdrant_sparse import (
+    build_bm25_document,
+    build_sparse_text,
+    ensure_sparse_collection_schema,
+    estimate_bm25_avg_len,
+    sparse_vector_name,
+)
 from app.services.vertex_ai_service import VertexAIEmbeddingService
 
 try:
@@ -36,15 +43,13 @@ except ImportError:  # pragma: no cover - dependency is present in the image
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.http.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
+    from qdrant_client.http.models import FieldCondition, Filter, MatchValue, PointStruct
 except ImportError:  # pragma: no cover - dependency is present in the image
     QdrantClient = None
-    Distance = None
     FieldCondition = None
     Filter = None
     MatchValue = None
     PointStruct = None
-    VectorParams = None
 
 
 VERTEX_EMBEDDINGS = VertexAIEmbeddingService()
@@ -299,31 +304,41 @@ class IngestionService:
     def _upsert_chunks(self, document: DocumentRecordModel, chunks: List[str]) -> None:
         if self.qdrant is None:
             return
-        try:
-            self.qdrant.get_collection(settings.COLLECTION_NAME)
-        except Exception:
-            self.qdrant.create_collection(
-                collection_name=settings.COLLECTION_NAME,
-                vectors_config=VectorParams(size=settings.VECTOR_SIZE, distance=Distance.COSINE),
-            )
+        ensure_sparse_collection_schema(self.qdrant)
         vectors = self._embed_chunks(chunks)
-        points = []
+        prepared_chunks = []
         for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
-            point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{document.document_id}:{index}"))
-            article_match = re.search(r"(Äiá»u\s+\d+[^\n.]*)", chunk, flags=re.IGNORECASE)
+            article_match = re.search(r"(Điều\s+\d+[^\n.]*)", chunk, flags=re.IGNORECASE)
+            article = article_match.group(1) if article_match else ""
+            prepared_chunks.append(
+                {
+                    "index": index,
+                    "chunk": chunk,
+                    "vector": vector,
+                    "article": article,
+                    "sparse_text": build_sparse_text(document.title, article, chunk),
+                }
+            )
+        avg_len = estimate_bm25_avg_len([item["sparse_text"] for item in prepared_chunks])
+        points = []
+        for item in prepared_chunks:
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{document.document_id}:{item['index']}"))
             points.append(
                 PointStruct(
                     id=point_id,
-                    vector=vector,
+                    vector={
+                        "": item["vector"],
+                        sparse_vector_name(): build_bm25_document(item["sparse_text"], avg_len),
+                    },
                     payload={
                         "document_id": document.document_id,
                         "title": document.title,
                         "source_url": document.source_url,
                         "domain": document.domain,
-                        "article": article_match.group(1) if article_match else "",
-                        "chunk_index": index,
+                        "article": item["article"],
+                        "chunk_index": item["index"],
                         "effective_status": document.effective_status,
-                        "content": chunk,
+                        "content": item["chunk"],
                         "enabled": document.enabled,
                     },
                 )

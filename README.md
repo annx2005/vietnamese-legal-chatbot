@@ -7,8 +7,8 @@ A Microservice Vietnamese legal chatbot with public chat, admin document ingesti
 - `frontend`: Vite + React app with `/chat` and `/admin`.
 - `api-router`: Nginx reverse proxy entrypoint for `/api/v1/*` in both local and Cloud Run.
 - `upload-service`: uploads PDF files to GCS and returns document metadata.
-- `ingestion-service`: reads PDF/text, chunks content, creates Vertex AI embeddings, and upserts chunks into Qdrant.
-- `rag-service`: retrieves legal chunks from Qdrant, calls Gemini to draft grounded answers, and returns citations with confidence fallback.
+- `ingestion-service`: reads PDF/text, chunks content, creates Vertex AI dense embeddings plus Qdrant BM25 sparse vectors, and upserts both into Qdrant.
+- `rag-service`: retrieves legal chunks from Qdrant with native hybrid search, calls Gemini to draft grounded answers, and returns citations with confidence fallback.
 - `postgres`, `qdrant`: local infrastructure.
 
 ## Run Local
@@ -30,9 +30,9 @@ Open:
 1. Admin logs in at `/admin` and receives a Bearer JWT.
 2. Admin uploads a PDF or submits a file URL in `/admin`.
 3. `upload-service` stores PDFs in GCS when credentials are configured.
-4. `ingestion-service` extracts text, chunks it, and writes vectors to Qdrant.
+4. `ingestion-service` extracts text, chunks it, and writes dense + sparse vectors to Qdrant.
 5. User asks a question in `/chat`.
-6. `rag-service` retrieves relevant chunks and returns an answer with citations.
+6. `rag-service` retrieves relevant chunks with Qdrant native hybrid search and returns an answer with citations.
 7. Admin reviews answers in `Chat Logs`.
 
 Admin upload, ingestion, and review APIs require a JWT with `ROLE_ADMIN`. Local defaults are `ADMIN_USERNAME=admin` and `ADMIN_PASSWORD=admin123`; change `JWT_SECRET_KEY` before any shared demo or deployment.
@@ -90,6 +90,11 @@ The importer stores these metadata fields in each Qdrant payload: `id`, `title`,
 
 - The services now use Vertex AI for embeddings and answer generation when credentials are available.
 - If Vertex AI is unavailable, the backend falls back to deterministic local embeddings and a template answer so local development still works.
+- `rag-service` now defaults to `SEARCH_MODE=hybrid`, using Qdrant native hybrid retrieval with dense semantic prefetch + BM25 sparse prefetch fused by RRF. Set `SEARCH_MODE=semantic` to keep vector-only retrieval.
+- BM25 sparse vectors are stored under `QDRANT_SPARSE_VECTOR_NAME=bm25_sparse_vector` by default and use `BM25_LANGUAGE=none`, `BM25_TOKENIZER=multilingual`, and `BM25_ASCII_FOLDING=true` so Vietnamese queries/chunks are normalized consistently.
+- `BM25_AVG_LEN=0` means the ingestion pipeline estimates average token length from each ingest batch. For more stable ranking across incremental ingests, you can set a corpus-wide average explicitly.
+- Existing points that were indexed before this change need to be re-ingested or backfilled once so they also receive sparse vectors. Use `docker compose exec ingestion-service python scripts/backfill_qdrant_sparse_vectors.py` for local backfill.
+- Hybrid tuning envs for `rag-service`: `HYBRID_DENSE_PREFETCH_MULTIPLIER` and `HYBRID_SPARSE_PREFETCH_MULTIPLIER`.
 - Prompt files live in `rag-service/app/prompts/system_prompt.txt` and `rag-service/app/prompts/user_prompt.txt`.
 - Chat history, ingestion jobs, and document registry are in memory for this first version.
 - The bot is designed for legal lookup with citations, not personalized legal advice.

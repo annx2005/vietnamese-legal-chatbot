@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str = "text-embedding-005"
     VECTOR_SIZE: int = 384
     VERTEX_EMBEDDING_BATCH_SIZE: int = 8
+    QDRANT_SPARSE_VECTOR_NAME: str = "bm25_sparse_vector"
+    BM25_AVG_LEN: float = 0.0
+    BM25_LANGUAGE: str = "none"
+    BM25_TOKENIZER: str = "multilingual"
+    BM25_ASCII_FOLDING: bool = True
     CHUNK_SIZE: int = 1200
     CHUNK_OVERLAP: int = 160
     JWT_SECRET_KEY: str = "super-secret-jwt-key-change-in-production"

@@ -1,7 +1,6 @@
 import hashlib
 import re
 import uuid
-from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlalchemy.orm import Session
@@ -14,19 +13,33 @@ from app.services.vertex_ai_service import VertexAIService
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.http.models import FieldCondition, Filter, MatchValue
+    from qdrant_client.http.models import (
+        Document as QdrantDocument,
+        FieldCondition,
+        Filter,
+        Fusion,
+        FusionQuery,
+        MatchValue,
+        Modifier,
+        Prefetch,
+        SparseVectorConfig,
+        SparseVectorNameConfig,
+    )
 except ImportError:  # pragma: no cover - dependency is present in the image
     QdrantClient = None
+    QdrantDocument = None
     FieldCondition = None
     Filter = None
+    Fusion = None
+    FusionQuery = None
     MatchValue = None
+    Modifier = None
+    Prefetch = None
+    SparseVectorConfig = None
+    SparseVectorNameConfig = None
 
 
 VERTEX_AI = VertexAIService()
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
 
 
 def _embedding(text: str) -> List[float]:
@@ -58,6 +71,25 @@ def _qdrant_client_kwargs() -> dict:
     if settings.QDRANT_API_KEY:
         kwargs["api_key"] = settings.QDRANT_API_KEY
     return kwargs
+
+
+def _bm25_query_document(query: str):
+    return QdrantDocument(
+        text=query,
+        model="qdrant/bm25",
+        options={
+            "language": settings.BM25_LANGUAGE,
+            "tokenizer": settings.BM25_TOKENIZER,
+            "ascii_folding": settings.BM25_ASCII_FOLDING,
+        },
+    )
+
+
+def _sparse_vector_name_config():
+    return SparseVectorNameConfig(
+        sparse=SparseVectorConfig(modifier=Modifier.IDF),
+    )
+
 
 class RAGService:
     def __init__(self, db: Optional[Session] = None):
@@ -125,43 +157,123 @@ class RAGService:
     def _retrieve(self, request: QueryRequest) -> List[SourceDocument]:
         if self.qdrant is None:
             return self._fallback_sources(request)
+        query_text = request.query.strip()
+        if not query_text:
+            return []
         query_filter = self._build_filter(request.filters or {})
+
+        if self._search_mode() == "hybrid" and self._ensure_sparse_vector_schema():
+            try:
+                return self._hybrid_sources(query_text, query_filter, request.top_k)
+            except Exception:
+                pass
+
         try:
-            if hasattr(self.qdrant, "query_points"):
-                result = self.qdrant.query_points(
-                    collection_name=settings.COLLECTION_NAME,
-                    query=self._embed_query(request.query),
-                    query_filter=query_filter,
-                    limit=request.top_k,
-                    with_payload=True,
-                )
-                hits = result.points
-            else:
-                hits = self.qdrant.search(
-                    collection_name=settings.COLLECTION_NAME,
-                    query_vector=self._embed_query(request.query),
-                    query_filter=query_filter,
-                    limit=request.top_k,
-                    with_payload=True,
-                )
+            hits = self._semantic_search(query_text, query_filter, request.top_k)
         except Exception:
             return self._fallback_sources(request)
+        return self._sources_from_hits(hits, request.top_k, "semantic")
 
+    def _semantic_search(self, query: str, query_filter, top_k: int):
+        embedded_query = self._embed_query(query)
+        if hasattr(self.qdrant, "query_points"):
+            result = self.qdrant.query_points(
+                collection_name=settings.COLLECTION_NAME,
+                query=embedded_query,
+                query_filter=query_filter,
+                limit=max(top_k, 1),
+                with_payload=True,
+            )
+            return result.points
+        return self.qdrant.search(
+            collection_name=settings.COLLECTION_NAME,
+            query_vector=embedded_query,
+            query_filter=query_filter,
+            limit=max(top_k, 1),
+            with_payload=True,
+        )
+
+    def _hybrid_sources(self, query: str, query_filter, top_k: int) -> List[SourceDocument]:
+        dense_prefetch_limit = max(top_k, top_k * max(settings.HYBRID_DENSE_PREFETCH_MULTIPLIER, 1))
+        sparse_prefetch_limit = max(top_k, top_k * max(settings.HYBRID_SPARSE_PREFETCH_MULTIPLIER, 1))
+        result = self.qdrant.query_points(
+            collection_name=settings.COLLECTION_NAME,
+            prefetch=[
+                Prefetch(
+                    query=self._embed_query(query),
+                    limit=dense_prefetch_limit,
+                ),
+                Prefetch(
+                    query=_bm25_query_document(query),
+                    using=settings.QDRANT_SPARSE_VECTOR_NAME,
+                    limit=sparse_prefetch_limit,
+                ),
+            ],
+            query=FusionQuery(fusion=Fusion.RRF),
+            query_filter=query_filter,
+            limit=max(top_k, 1),
+            with_payload=True,
+        )
+        return self._sources_from_hits(result.points, top_k, "hybrid")
+
+    def _ensure_sparse_vector_schema(self) -> bool:
+        if (
+            self.qdrant is None
+            or SparseVectorNameConfig is None
+            or SparseVectorConfig is None
+            or Modifier is None
+        ):
+            return False
+        try:
+            collection_info = self.qdrant.get_collection(settings.COLLECTION_NAME)
+        except Exception:
+            return False
+
+        sparse_vectors = getattr(collection_info.config.params, "sparse_vectors", None) or {}
+        if settings.QDRANT_SPARSE_VECTOR_NAME in sparse_vectors:
+            return True
+
+        try:
+            self.qdrant.create_vector_name(
+                collection_name=settings.COLLECTION_NAME,
+                vector_name=settings.QDRANT_SPARSE_VECTOR_NAME,
+                vector_name_config=_sparse_vector_name_config(),
+            )
+            return True
+        except Exception:
+            try:
+                refreshed = self.qdrant.get_collection(settings.COLLECTION_NAME)
+            except Exception:
+                return False
+            sparse_vectors = getattr(refreshed.config.params, "sparse_vectors", None) or {}
+            return settings.QDRANT_SPARSE_VECTOR_NAME in sparse_vectors
+
+    @staticmethod
+    def _search_mode() -> str:
+        mode = settings.SEARCH_MODE.strip().lower()
+        if mode in {"semantic", "hybrid"}:
+            return mode
+        return "hybrid"
+
+    def _sources_from_hits(self, hits, top_k: int, search_mode: str) -> List[SourceDocument]:
         sources: List[SourceDocument] = []
         for hit in hits:
             payload = hit.payload or {}
             if payload.get("enabled") is False:
                 continue
+            metadata = dict(payload)
+            metadata["search_mode"] = search_mode
+            metadata["search_scores"] = {search_mode: round(float(hit.score or 0.0), 6)}
             content = str(payload.get("content", ""))
             sources.append(
                 SourceDocument(
                     id=str(hit.id),
                     content=content,
-                    score=float(hit.score or 0),
-                    metadata=payload,
+                    score=float(hit.score or 0.0),
+                    metadata=metadata,
                 )
             )
-        return sources
+        return sources[: max(top_k, 1)]
 
     def _build_filter(self, filters: dict):
         conditions = []
@@ -253,7 +365,6 @@ class RAGService:
 
     @staticmethod
     def _row_to_chat_log(row: ChatLogRecord) -> ChatLog:
-        """Convert a SQLAlchemy row to a Pydantic ChatLog schema."""
         return ChatLog(
             id=row.id,
             query=row.query,

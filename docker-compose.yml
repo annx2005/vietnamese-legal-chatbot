@@ -132,6 +132,13 @@ services:
       - COLLECTION_NAME=${COLLECTION_NAME:-legal_documents}
       - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-text-embedding-005}
       - LLM_MODEL_NAME=${LLM_MODEL_NAME:-gemini-2.5-flash}
+      - SEARCH_MODE=${SEARCH_MODE:-hybrid}
+      - QDRANT_SPARSE_VECTOR_NAME=${QDRANT_SPARSE_VECTOR_NAME:-bm25_sparse_vector}
+      - BM25_LANGUAGE=${BM25_LANGUAGE:-none}
+      - BM25_TOKENIZER=${BM25_TOKENIZER:-multilingual}
+      - BM25_ASCII_FOLDING=${BM25_ASCII_FOLDING:-true}
+      - HYBRID_DENSE_PREFETCH_MULTIPLIER=${HYBRID_DENSE_PREFETCH_MULTIPLIER:-4}
+      - HYBRID_SPARSE_PREFETCH_MULTIPLIER=${HYBRID_SPARSE_PREFETCH_MULTIPLIER:-4}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-legal_rag_db}
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/var/run/gcp/application_default_credentials.json}
@@ -166,6 +173,11 @@ services:
       - GCP_LOCATION=${GCP_REGION:-asia-southeast1}
       - GCS_BUCKET_NAME=${UPLOAD_BUCKET_NAME}
       - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-text-embedding-005}
+      - QDRANT_SPARSE_VECTOR_NAME=${QDRANT_SPARSE_VECTOR_NAME:-bm25_sparse_vector}
+      - BM25_AVG_LEN=${BM25_AVG_LEN:-0}
+      - BM25_LANGUAGE=${BM25_LANGUAGE:-none}
+      - BM25_TOKENIZER=${BM25_TOKENIZER:-multilingual}
+      - BM25_ASCII_FOLDING=${BM25_ASCII_FOLDING:-true}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
       - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-legal_rag_db}
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/var/run/gcp/application_default_credentials.json}

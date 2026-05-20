@@ -11,13 +11,20 @@ from typing import Dict, Iterable, Iterator, List, Sequence
 
 from datasets import load_dataset
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, PointStruct, VectorParams
+from qdrant_client.http.models import PointStruct
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import settings
 from app.db.models import Base, DocumentRecordModel, IngestionJobRecord
 from app.db.session import SessionLocal, engine
+from app.services.qdrant_sparse import (
+    build_bm25_document,
+    build_sparse_text,
+    ensure_sparse_collection_schema,
+    estimate_bm25_avg_len,
+    sparse_vector_name,
+)
 from app.services.vertex_ai_service import VertexAIEmbeddingService
 
 
@@ -137,16 +144,6 @@ def select_metadata(limit: int | None, domains: Sequence[str]) -> Dict[int, dict
     return selected
 
 
-def ensure_collection(client: QdrantClient) -> None:
-    try:
-        client.get_collection(settings.COLLECTION_NAME)
-    except Exception:
-        client.create_collection(
-            collection_name=settings.COLLECTION_NAME,
-            vectors_config=VectorParams(size=settings.VECTOR_SIZE, distance=Distance.COSINE),
-        )
-
-
 def qdrant_client_kwargs() -> dict:
     kwargs = {}
     if settings.QDRANT_URL:
@@ -193,14 +190,29 @@ def make_document_points(
     chunk_count = 0
     batch_size = max(embedding_batch_size, 1)
     print(f"Processing document {document_id}: {metadata['title'][:120]}", flush=True)
-    for batch_chunks in batched_texts(iter_chunks(text, chunk_size, chunk_overlap), batch_size):
+    chunks = list(iter_chunks(text, chunk_size, chunk_overlap))
+    articles = []
+    sparse_texts = []
+    for chunk in chunks:
+        article_match = re.search(r"(Điều\s+\d+[^\n.]*)", chunk, flags=re.IGNORECASE)
+        article = article_match.group(1) if article_match else ""
+        articles.append(article)
+        sparse_texts.append(build_sparse_text(metadata["title"], article, chunk))
+    avg_len = estimate_bm25_avg_len(sparse_texts)
+
+    for start in range(0, len(chunks), batch_size):
+        batch_chunks = chunks[start : start + batch_size]
         vectors = create_embeddings(batch_chunks, allow_local_fallback)
-        for chunk, vector in zip(batch_chunks, vectors):
-            article_match = re.search(r"(Điều\s+\d+[^\n.]*)", chunk, flags=re.IGNORECASE)
+        batch_articles = articles[start : start + batch_size]
+        batch_sparse_texts = sparse_texts[start : start + batch_size]
+        for chunk, vector, article, sparse_text in zip(batch_chunks, vectors, batch_articles, batch_sparse_texts):
             point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"hf:{document_id}:{chunk_count}"))
             yield PointStruct(
                 id=point_id,
-                vector=vector,
+                vector={
+                    "": vector,
+                    sparse_vector_name(): build_bm25_document(sparse_text, avg_len),
+                },
                 payload={
                     "id": document_id,
                     "document_id": str(document_id),
@@ -214,7 +226,7 @@ def make_document_points(
                     "issuing_authority": metadata["issuing_authority"],
                     "issuance_date": metadata["issuance_date"],
                     "effective_status": "unknown",
-                    "article": article_match.group(1) if article_match else "",
+                    "article": article,
                     "chunk_index": chunk_count,
                     "content": chunk,
                     "enabled": True,
@@ -376,7 +388,7 @@ def main() -> None:
     print(f"Selected {len(metadata_by_id)} metadata rows", flush=True)
 
     client = QdrantClient(**qdrant_client_kwargs())
-    ensure_collection(client)
+    ensure_sparse_collection_schema(client)
 
     total_points = 0
     chunk_counts: Dict[str, int] = {}

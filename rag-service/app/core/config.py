@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL_NAME: str = "text-embedding-005"
     LLM_MODEL_NAME: str = "gemini-2.5-flash"
     VECTOR_SIZE: int = 384
+    SEARCH_MODE: str = "hybrid"
+    QDRANT_SPARSE_VECTOR_NAME: str = "bm25_sparse_vector"
+    BM25_LANGUAGE: str = "none"
+    BM25_TOKENIZER: str = "multilingual"
+    BM25_ASCII_FOLDING: bool = True
+    HYBRID_DENSE_PREFETCH_MULTIPLIER: int = 4
+    HYBRID_SPARSE_PREFETCH_MULTIPLIER: int = 4
     CONFIDENCE_THRESHOLD: float = 0.18
     LLM_TEMPERATURE: float = 0.2
     LLM_MAX_OUTPUT_TOKENS: int = 1024
