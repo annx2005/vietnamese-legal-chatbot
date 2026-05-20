@@ -33,15 +33,16 @@ jobs:
       id-token: "write"
 
     strategy:
+      max-parallel: 1
       matrix:
         include:
           - service: auth-service
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
-            env_vars: "DATABASE_URL=jdbc:postgresql:///metadata_db?cloudSqlInstance=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod&socketFactory=com.google.cloud.sql.postgres.SocketFactory,DB_USER=legal_app_user"
+            env_vars: "DATABASE_URL=jdbc:postgresql:///metadata_db?cloudSqlInstance=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod&socketFactory=com.google.cloud.sql.postgres.SocketFactory,DB_USER=legal_app_user,SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=2,SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=0,SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT=10000,SPRING_DATASOURCE_HIKARI_MAX_LIFETIME=600000"
             secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest"
           - service: upload-service
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
-            env_vars: "PROJECT_ID=legal-chatbot-496302,UPLOAD_BUCKET_NAME=legal-rag-documents-prod,PUBSUB_TOPIC_NAME=legal-document-uploaded-prod,SPRING_DATASOURCE_URL=jdbc:postgresql:///metadata_db?cloudSqlInstance=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod&socketFactory=com.google.cloud.sql.postgres.SocketFactory,SPRING_DATASOURCE_USERNAME=legal_app_user"
+            env_vars: "PROJECT_ID=legal-chatbot-496302,UPLOAD_BUCKET_NAME=legal-rag-documents-prod,PUBSUB_TOPIC_NAME=legal-document-uploaded-prod,SPRING_DATASOURCE_URL=jdbc:postgresql:///metadata_db?cloudSqlInstance=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod&socketFactory=com.google.cloud.sql.postgres.SocketFactory,SPRING_DATASOURCE_USERNAME=legal_app_user,SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=2,SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=0,SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT=10000,SPRING_DATASOURCE_HIKARI_MAX_LIFETIME=600000"
             secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest,SPRING_DATASOURCE_PASSWORD=legal-rag-db-password-prod:latest"
           - service: ingestion-service
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
