@@ -5,6 +5,8 @@
 out/
 agents/
 .vscode/
+docs/
+outputs/
 
 ### macOS / OS specific ###
 .DS_Store

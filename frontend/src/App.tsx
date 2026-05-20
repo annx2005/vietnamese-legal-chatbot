@@ -4,7 +4,7 @@ import {
   LogIn,
   LogOut,
   MessageSquareText,
-  ShieldCheck
+  ShieldCheck,
 } from "lucide-react";
 import { AuthUser } from "./types";
 import { readStoredUser, AUTH_STORAGE_KEY } from "./api";
@@ -12,7 +12,9 @@ import { Chat } from "./components/Chat";
 import { AdminGate } from "./components/AdminGate";
 
 export default function App() {
-  const [path, setPath] = useState(window.location.pathname === "/admin" ? "/admin" : "/chat");
+  const [path, setPath] = useState(
+    window.location.pathname === "/admin" ? "/admin" : "/chat",
+  );
   const [user, setUser] = useState<AuthUser | null>(() => readStoredUser());
   const isAdmin = user?.role === "ROLE_ADMIN";
 
@@ -38,19 +40,27 @@ export default function App() {
         <div className="brand">
           <ShieldCheck size={24} />
           <div>
-            <strong>Legal RAG</strong>
-            <span>Tra cứu pháp luật</span>
+            <strong>Tra cứu pháp luật</strong>
           </div>
         </div>
-        <button className={path === "/chat" ? "nav active" : "nav"} onClick={() => setPath("/chat")}>
+        <button
+          className={path === "/chat" ? "nav active" : "nav"}
+          onClick={() => setPath("/chat")}
+        >
           <MessageSquareText size={18} /> Chat
         </button>
         {isAdmin ? (
-          <button className={path === "/admin" ? "nav active" : "nav"} onClick={() => setPath("/admin")}>
+          <button
+            className={path === "/admin" ? "nav active" : "nav"}
+            onClick={() => setPath("/admin")}
+          >
             <BarChart3 size={18} /> Admin
           </button>
         ) : (
-          <button className={path === "/admin" ? "nav active" : "nav"} onClick={() => setPath("/admin")}>
+          <button
+            className={path === "/admin" ? "nav active" : "nav"}
+            onClick={() => setPath("/admin")}
+          >
             <LogIn size={18} /> Đăng nhập
           </button>
         )}
@@ -64,7 +74,13 @@ export default function App() {
           </div>
         )}
       </aside>
-      <main className="main">{path === "/admin" ? <AdminGate user={user} onLogin={saveUser} /> : <Chat />}</main>
+      <main className="main">
+        {path === "/admin" ? (
+          <AdminGate user={user} onLogin={saveUser} />
+        ) : (
+          <Chat />
+        )}
+      </main>
     </div>
   );
 }

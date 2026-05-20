@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useState } from "react";
-import { BarChart3, FileText, RefreshCw, History, Upload } from "lucide-react";
+import { BarChart3, FileText, RefreshCw, Upload } from "lucide-react";
 import { api } from "../api";
-import { DocumentRecord, IngestionJob, ChatLog } from "../types";
+import { DocumentRecord, IngestionJob } from "../types";
 import { Metric, PanelTitle, StatusBadge, EmptyState } from "./Common";
 
 export function Admin() {
@@ -31,14 +31,10 @@ export function Admin() {
         <button className={tab === "jobs" ? "tab active" : "tab"} onClick={() => setTab("jobs")}>
           <RefreshCw size={16} /> Jobs
         </button>
-        <button className={tab === "logs" ? "tab active" : "tab"} onClick={() => setTab("logs")}>
-          <History size={16} /> Chat Logs
-        </button>
       </div>
       {tab === "dashboard" && <Dashboard />}
       {tab === "documents" && <Documents />}
       {tab === "jobs" && <Jobs />}
-      {tab === "logs" && <ChatLogs />}
     </section>
   );
 }
@@ -76,7 +72,6 @@ function Dashboard() {
       <Metric label="Đang xử lý" value={stats.processing} />
       <Metric label="Câu hỏi" value={stats.logs} />
       <Metric label="Low confidence" value={stats.low} tone={stats.low ? "warn" : "ok"} />
-      <Metric label="Đã review" value={stats.reviewed} />
     </div>
   );
 }
@@ -162,6 +157,23 @@ function DocumentTable({
   documents: DocumentRecord[];
   onRefresh: () => void;
 }) {
+  const [page, setPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
+
+  const filtered = documents.filter(
+    (doc) =>
+      doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      doc.domain.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
+  const displayed = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
   async function toggle(documentId: string, currentlyEnabled: boolean) {
     try {
       if (currentlyEnabled) {
@@ -176,37 +188,75 @@ function DocumentTable({
   }
 
   return (
-    <table>
-      <thead>
-        <tr>
-          <th>Title</th>
-          <th>Domain</th>
-          <th>Status</th>
-          <th>Chunks</th>
-          <th style={{ textAlign: "center" }}>Enabled</th>
-        </tr>
-      </thead>
-      <tbody>
-        {documents.map((document) => (
-          <tr key={document.document_id}>
-            <td>{document.title}</td>
-            <td>{document.domain}</td>
-            <td>
-              <StatusBadge status={document.ingestion_status} />
-            </td>
-            <td>{document.chunks_count}</td>
-            <td style={{ textAlign: "center" }}>
-              <input
-                type="checkbox"
-                checked={document.enabled}
-                onChange={() => toggle(document.document_id, document.enabled)}
-                style={{ cursor: "pointer", width: "16px", height: "16px" }}
-              />
-            </td>
+    <div>
+      <div style={{ marginBottom: "16px", display: "flex", gap: "12px", alignItems: "center" }}>
+        <input
+          type="text"
+          placeholder="Tìm kiếm tài liệu (tên, lĩnh vực)..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{ maxWidth: "320px", padding: "10px 14px" }}
+        />
+        <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+          {filtered.length} kết quả
+        </span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Domain</th>
+            <th>Status</th>
+            <th>Chunks</th>
+            <th style={{ textAlign: "center" }}>Enabled</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {displayed.map((document) => (
+            <tr key={document.document_id}>
+              <td>{document.title}</td>
+              <td>{document.domain}</td>
+              <td>
+                <StatusBadge status={document.ingestion_status} />
+              </td>
+              <td>{document.chunks_count}</td>
+              <td style={{ textAlign: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={document.enabled}
+                  onChange={() => toggle(document.document_id, document.enabled)}
+                  style={{ cursor: "pointer", width: "16px", height: "16px" }}
+                />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      
+      {totalPages > 1 && (
+        <div style={{ display: "flex", gap: "12px", marginTop: "20px", justifyContent: "flex-end", alignItems: "center" }}>
+          <button 
+            className="ghost" 
+            disabled={page === 1} 
+            onClick={() => setPage(p => p - 1)}
+            style={{ padding: "6px 12px", borderRadius: "6px" }}
+          >
+            Trước
+          </button>
+          <span style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-secondary)" }}>
+            Trang {page} / {totalPages}
+          </span>
+          <button 
+            className="ghost" 
+            disabled={page === totalPages} 
+            onClick={() => setPage(p => p + 1)}
+            style={{ padding: "6px 12px", borderRadius: "6px" }}
+          >
+            Sau
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -268,36 +318,3 @@ function Jobs() {
   );
 }
 
-function ChatLogs() {
-  const [logs, setLogs] = useState<ChatLog[]>([]);
-
-  async function refresh() {
-    const result = await api.chatLogs();
-    setLogs(result.logs);
-  }
-
-  useEffect(() => {
-    refresh().catch(() => undefined);
-  }, []);
-
-  return (
-    <div className="table-panel">
-      <PanelTitle title="Chat Logs" />
-      {logs.length === 0 ? (
-        <EmptyState text="Chưa có câu hỏi nào." />
-      ) : (
-        <div className="log-list">
-          {logs.map((log) => (
-            <article className="log-row" key={log.id}>
-              <div>
-                <strong>{log.query}</strong>
-                <p>{log.answer}</p>
-                <span>{Math.round(log.confidence * 100)}% confidence</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

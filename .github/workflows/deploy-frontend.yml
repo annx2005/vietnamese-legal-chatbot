@@ -1,0 +1,71 @@
+name: Build and Deploy Frontend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - ".github/workflows/deploy-frontend.yml"
+
+env:
+  PROJECT_ID: legal-chatbot-496302
+  REGION: asia-southeast1
+  ENV: prod
+  WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider"
+  CICD_SERVICE_ACCOUNT: "legal-rag-cicd-prod@legal-chatbot-496302.iam.gserviceaccount.com"
+  APP_SERVICE_ACCOUNT: "legal-rag-app-prod@legal-chatbot-496302.iam.gserviceaccount.com"
+
+jobs:
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Google Auth (Workload Identity Federation)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
+          service_account: "${{ env.CICD_SERVICE_ACCOUNT }}"
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Docker Auth to Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+
+      - name: Build and Push Frontend Image
+        # Notice that we no longer pass --build-arg VITE_API_BASE_URL
+        # The URL will be injected at runtime by the container's entrypoint script
+        run: |-
+          IMAGE_NAME="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/frontend:${{ github.sha }}"
+          cd frontend
+          docker build -t $IMAGE_NAME .
+          docker push $IMAGE_NAME
+
+      - name: Resolve API Router URL
+        id: api-router-url
+        run: echo "url=$(gcloud run services describe api-router-${{ env.ENV }} --region=${{ env.REGION }} --format='value(status.url)')" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Frontend
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: "frontend-${{ env.ENV }}"
+          region: "${{ env.REGION }}"
+          image: "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/frontend:${{ github.sha }}"
+          flags: >-
+            --allow-unauthenticated
+            --port=8080
+            --service-account=${{ env.APP_SERVICE_ACCOUNT }}
+            --set-env-vars=VITE_API_BASE_URL=${{ steps.api-router-url.outputs.url }}
+
+      - name: Show Output URL
+        run: echo "Deployed frontend to ${{ steps.deploy.outputs.url }}"

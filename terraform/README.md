@@ -51,7 +51,7 @@ Tài liệu này xác định các quy ước chuẩn cho đội ngũ **2 Dev** 
 
 ### 🅱️ Cấp Độ 2: Môi Trường Phát Triển Local (Docker Compose)
 *   **File `.env` ở thư mục gốc:**
-    *   Chứa tất cả cấu hình chạy thử của các microservices (Kong Gateway, PostgreSQL, Qdrant).
+    *   Chứa tất cả cấu hình chạy thử của các microservices (`api-router`, PostgreSQL, Qdrant).
     *   **Quy tắc:** Chỉ được commit file `.env.example` chứa các cấu hình mẫu lên GitHub. File `.env` thực tế sẽ bị bỏ qua (đã có trong `.gitignore`).
 
 ### 🆃 Cấp Độ 3: Môi Trường Triển Khai Thực Tế (GCP Production)

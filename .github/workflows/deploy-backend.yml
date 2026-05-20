@@ -1,63 +1,91 @@
-name: Build and Deploy to Cloud Run
+name: Build and Deploy Backend Services
 
 on:
   push:
     branches:
       - main
     paths:
-      # Khởi chạy pipeline khi có thay đổi trong các services chạy trên Cloud Run
       - "auth-service/**"
       - "upload-service/**"
       - "ingestion-service/**"
       - "rag-service/**"
       - "api-router/**"
-      - "frontend/**"
-      - ".github/workflows/**"
+      - ".github/workflows/deploy-backend.yml"
 
 env:
-  PROJECT_ID: legal-chatbot-496302 # Hãy thay bằng Project ID thật của bạn
+  PROJECT_ID: legal-chatbot-496302
   REGION: asia-southeast1
   ENV: prod
-  # Các biến dưới đây lấy từ kết quả lệnh `terraform apply` (phần Outputs)
   WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider"
   CICD_SERVICE_ACCOUNT: "legal-rag-cicd-prod@legal-chatbot-496302.iam.gserviceaccount.com"
   APP_SERVICE_ACCOUNT: "legal-rag-app-prod@legal-chatbot-496302.iam.gserviceaccount.com"
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      auth: ${{ steps.filter.outputs.auth }}
+      upload: ${{ steps.filter.outputs.upload }}
+      ingestion: ${{ steps.filter.outputs.ingestion }}
+      rag: ${{ steps.filter.outputs.rag }}
+      api_router: ${{ steps.filter.outputs.api_router }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            auth:
+              - 'auth-service/**'
+            upload:
+              - 'upload-service/**'
+            ingestion:
+              - 'ingestion-service/**'
+            rag:
+              - 'rag-service/**'
+            api_router:
+              - 'api-router/**'
+
   deploy-backends:
     name: Deploy Backend Services
+    needs: detect-changes
     runs-on: ubuntu-latest
-
     permissions:
       contents: "read"
       id-token: "write"
-
     strategy:
-      max-parallel: 1
+      max-parallel: 4
+      fail-fast: false
       matrix:
         include:
           - service: auth-service
+            changed: ${{ needs.detect-changes.outputs.auth == 'true' }}
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
             env_vars: "DATABASE_URL=jdbc:postgresql:///metadata_db?cloudSqlInstance=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod&socketFactory=com.google.cloud.sql.postgres.SocketFactory,DB_USER=legal_app_user,SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=2,SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=0,SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT=10000,SPRING_DATASOURCE_HIKARI_MAX_LIFETIME=600000"
             secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest"
           - service: upload-service
+            changed: ${{ needs.detect-changes.outputs.upload == 'true' }}
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
             env_vars: "PROJECT_ID=legal-chatbot-496302,UPLOAD_BUCKET_NAME=vietnamese-legal-rag-documents,PUBSUB_TOPIC_NAME=legal-document-uploaded-prod,SPRING_DATASOURCE_URL=jdbc:postgresql:///metadata_db?cloudSqlInstance=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod&socketFactory=com.google.cloud.sql.postgres.SocketFactory,SPRING_DATASOURCE_USERNAME=legal_app_user,SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=2,SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=0,SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT=10000,SPRING_DATASOURCE_HIKARI_MAX_LIFETIME=600000"
             secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest,SPRING_DATASOURCE_PASSWORD=legal-rag-db-password-prod:latest"
           - service: ingestion-service
+            changed: ${{ needs.detect-changes.outputs.ingestion == 'true' }}
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
             env_vars: "GCP_PROJECT_ID=legal-chatbot-496302,GCP_LOCATION=asia-southeast1,GCS_BUCKET_NAME=vietnamese-legal-rag-documents,PUBSUB_TOPIC=legal-document-uploaded-prod,CLOUD_SQL_CONNECTION_NAME=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod,DB_USER=legal_app_user,DB_NAME=metadata_db,COLLECTION_NAME=legal_documents,EMBEDDING_MODEL_NAME=text-embedding-005"
             secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest,QDRANT_URL=qdrant-url-prod:latest,QDRANT_API_KEY=qdrant-api-key-prod:latest"
           - service: rag-service
+            changed: ${{ needs.detect-changes.outputs.rag == 'true' }}
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
             env_vars: "GCP_PROJECT_ID=legal-chatbot-496302,GCP_LOCATION=asia-southeast1,CLOUD_SQL_CONNECTION_NAME=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod,DB_USER=legal_app_user,DB_NAME=metadata_db,COLLECTION_NAME=legal_documents,EMBEDDING_MODEL_NAME=text-embedding-005,LLM_MODEL_NAME=gemini-2.5-flash"
             secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest,QDRANT_URL=qdrant-url-prod:latest,QDRANT_API_KEY=qdrant-api-key-prod:latest"
-
+    
     steps:
       - name: Checkout Source Code
+        if: matrix.changed
         uses: actions/checkout@v4
 
       - name: Google Auth (Workload Identity Federation)
+        if: matrix.changed
         id: auth
         uses: google-github-actions/auth@v2
         with:
@@ -66,13 +94,15 @@ jobs:
           service_account: "${{ env.CICD_SERVICE_ACCOUNT }}"
 
       - name: Set up Cloud SDK
+        if: matrix.changed
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Docker Auth to Artifact Registry
-        run: |-
-          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
+        if: matrix.changed
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
 
       - name: Build and Push Docker Image
+        if: matrix.changed
         run: |-
           IMAGE_NAME="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/${{ matrix.service }}:${{ github.sha }}"
           cd ${{ matrix.service }}
@@ -80,6 +110,7 @@ jobs:
           docker push $IMAGE_NAME
 
       - name: Deploy to Cloud Run
+        if: matrix.changed
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v2
         with:
@@ -95,18 +126,14 @@ jobs:
             ${{ matrix.env_vars != '' && format('--set-env-vars={0}', matrix.env_vars) || '' }}
             ${{ matrix.secrets != '' && format('--set-secrets={0}', matrix.secrets) || '' }}
 
-      - name: Show Output URL
-        run: echo "Deployed ${{ matrix.service }} to ${{ steps.deploy.outputs.url }}"
-
-  configure-ingestion-subscription:
+  configure-ingestion:
     name: Configure Ingestion Subscription
+    needs: [detect-changes, deploy-backends]
+    if: ${{ needs.detect-changes.outputs.ingestion == 'true' }}
     runs-on: ubuntu-latest
-    needs: deploy-backends
-
     permissions:
       contents: "read"
       id-token: "write"
-
     steps:
       - name: Google Auth (Workload Identity Federation)
         id: auth
@@ -130,13 +157,12 @@ jobs:
 
   deploy-api-router:
     name: Deploy API Router
+    needs: [detect-changes, deploy-backends]
+    if: ${{ needs.detect-changes.outputs.api_router == 'true' || needs.detect-changes.outputs.auth == 'true' || needs.detect-changes.outputs.upload == 'true' || needs.detect-changes.outputs.ingestion == 'true' || needs.detect-changes.outputs.rag == 'true' }}
     runs-on: ubuntu-latest
-    needs: configure-ingestion-subscription
-
     permissions:
       contents: "read"
       id-token: "write"
-
     steps:
       - name: Checkout Source Code
         uses: actions/checkout@v4
@@ -182,59 +208,3 @@ jobs:
             --port=8080
             --service-account=${{ env.APP_SERVICE_ACCOUNT }}
             --set-env-vars=AUTH_SERVICE_URL=${{ steps.backend-urls.outputs.auth_url }},UPLOAD_SERVICE_URL=${{ steps.backend-urls.outputs.upload_url }},INGESTION_SERVICE_URL=${{ steps.backend-urls.outputs.ingestion_url }},RAG_SERVICE_URL=${{ steps.backend-urls.outputs.rag_url }}
-
-      - name: Show Output URL
-        run: echo "Deployed api-router to ${{ steps.deploy.outputs.url }}"
-
-  deploy-frontend:
-    name: Deploy Frontend
-    runs-on: ubuntu-latest
-    needs: deploy-api-router
-
-    permissions:
-      contents: "read"
-      id-token: "write"
-
-    steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
-
-      - name: Google Auth (Workload Identity Federation)
-        id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          token_format: "access_token"
-          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
-          service_account: "${{ env.CICD_SERVICE_ACCOUNT }}"
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Docker Auth to Artifact Registry
-        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
-
-      - name: Resolve API Router URL
-        id: api-router-url
-        run: echo "url=$(gcloud run services describe api-router-${{ env.ENV }} --region=${{ env.REGION }} --format='value(status.url)')" >> "$GITHUB_OUTPUT"
-
-      - name: Build and Push Frontend Image
-        run: |-
-          IMAGE_NAME="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/frontend:${{ github.sha }}"
-          cd frontend
-          docker build --build-arg VITE_API_BASE_URL=${{ steps.api-router-url.outputs.url }} -t $IMAGE_NAME .
-          docker push $IMAGE_NAME
-
-      - name: Deploy Frontend
-        id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: "frontend-${{ env.ENV }}"
-          region: "${{ env.REGION }}"
-          image: "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/frontend:${{ github.sha }}"
-          flags: >-
-            --allow-unauthenticated
-            --port=8080
-            --service-account=${{ env.APP_SERVICE_ACCOUNT }}
-
-      - name: Show Output URL
-        run: echo "Deployed frontend to ${{ steps.deploy.outputs.url }}"
