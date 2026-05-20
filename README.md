@@ -1,6 +1,6 @@
-# Legal RAG Chatbot MVP
+# Legal RAG Chatbot 
 
-Microservice MVP for a Vietnamese legal chatbot with public chat, admin document ingestion, RAG citations, and reviewable chat logs.
+A Microservice Vietnamese legal chatbot with public chat, admin document ingestion, RAG citations, and reviewable chat logs.
 
 ## Services
 
