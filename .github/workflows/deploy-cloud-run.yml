@@ -42,11 +42,11 @@ jobs:
             secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest"
           - service: upload-service
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
-            env_vars: "PROJECT_ID=legal-chatbot-496302,UPLOAD_BUCKET_NAME=legal-rag-documents-prod,PUBSUB_TOPIC_NAME=legal-document-uploaded-prod,SPRING_DATASOURCE_URL=jdbc:postgresql:///metadata_db?cloudSqlInstance=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod&socketFactory=com.google.cloud.sql.postgres.SocketFactory,SPRING_DATASOURCE_USERNAME=legal_app_user,SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=2,SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=0,SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT=10000,SPRING_DATASOURCE_HIKARI_MAX_LIFETIME=600000"
+            env_vars: "PROJECT_ID=legal-chatbot-496302,UPLOAD_BUCKET_NAME=vietnamese-legal-rag-documents,PUBSUB_TOPIC_NAME=legal-document-uploaded-prod,SPRING_DATASOURCE_URL=jdbc:postgresql:///metadata_db?cloudSqlInstance=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod&socketFactory=com.google.cloud.sql.postgres.SocketFactory,SPRING_DATASOURCE_USERNAME=legal_app_user,SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=2,SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=0,SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT=10000,SPRING_DATASOURCE_HIKARI_MAX_LIFETIME=600000"
             secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest,SPRING_DATASOURCE_PASSWORD=legal-rag-db-password-prod:latest"
           - service: ingestion-service
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
-            env_vars: "GCP_PROJECT_ID=legal-chatbot-496302,GCP_LOCATION=asia-southeast1,GCS_BUCKET_NAME=legal-rag-documents-prod,PUBSUB_TOPIC=legal-document-uploaded-prod,CLOUD_SQL_CONNECTION_NAME=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod,DB_USER=legal_app_user,DB_NAME=metadata_db,COLLECTION_NAME=legal_documents,EMBEDDING_MODEL_NAME=text-embedding-005"
+            env_vars: "GCP_PROJECT_ID=legal-chatbot-496302,GCP_LOCATION=asia-southeast1,GCS_BUCKET_NAME=vietnamese-legal-rag-documents,PUBSUB_TOPIC=legal-document-uploaded-prod,CLOUD_SQL_CONNECTION_NAME=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod,DB_USER=legal_app_user,DB_NAME=metadata_db,COLLECTION_NAME=legal_documents,EMBEDDING_MODEL_NAME=text-embedding-005"
             secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest,QDRANT_URL=qdrant-url-prod:latest,QDRANT_API_KEY=qdrant-api-key-prod:latest"
           - service: rag-service
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
