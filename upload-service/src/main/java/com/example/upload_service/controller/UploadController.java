@@ -30,8 +30,10 @@ public class UploadController {
     public ResponseEntity<UploadResponse> uploadFile(
             @Parameter(description = "File to upload", content = @Content(mediaType = MediaType.MULTIPART_FORM_DATA_VALUE))
             @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestParam("file") MultipartFile file) {
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "domain", required = false) String domain,
+            @RequestParam(value = "effectiveStatus", required = false) String effectiveStatus) {
         jwtService.requireAdmin(authorization);
-        return ResponseEntity.ok(uploadService.uploadFile(file));
+        return ResponseEntity.ok(uploadService.uploadFile(file, domain, effectiveStatus));
     }
 }

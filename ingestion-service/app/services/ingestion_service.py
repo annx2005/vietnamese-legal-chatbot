@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -89,6 +90,14 @@ def _title_from_request(request: IngestRequest) -> str:
     return "Legal document"
 
 
+def _metadata_value(metadata: dict, key: str, default: str) -> str:
+    value = metadata.get(key, default)
+    if value is None:
+        return default
+    normalized = str(value).strip()
+    return normalized or default
+
+
 def _qdrant_client_kwargs() -> dict:
     kwargs = {}
     if settings.QDRANT_URL:
@@ -108,8 +117,13 @@ class IngestionService:
         if QdrantClient is not None:
             self.qdrant = QdrantClient(**_qdrant_client_kwargs())
 
-    async def trigger_ingestion(self, request: IngestRequest) -> IngestResponse:
-        task_id = f"task_{uuid.uuid4().hex[:10]}"
+    async def trigger_ingestion(self, request: IngestRequest, task_id: Optional[str] = None) -> IngestResponse:
+        provided_task_id = task_id
+        task_id = task_id or f"task_{uuid.uuid4().hex[:10]}"
+        if provided_task_id:
+            existing_job = self._get_job(task_id)
+            if existing_job is not None:
+                return self._job_response(existing_job)
         if not request.file_url:
             return IngestResponse(
                 task_id=task_id,
@@ -122,7 +136,14 @@ class IngestionService:
         document_id = request.document_id or f"doc_{uuid.uuid4().hex[:12]}"
         document_row = self._upsert_processing_document(document_id, request, started_at)
         job_row = self._create_job(task_id, document_id, request.file_url, started_at)
-        self._commit()
+        try:
+            self._commit()
+        except IntegrityError:
+            self._rollback()
+            existing_job = self._get_job(task_id)
+            if existing_job is not None:
+                return self._job_response(existing_job)
+            raise
 
         try:
             raw_bytes = await self._load_file(request.file_url)
@@ -182,17 +203,19 @@ class IngestionService:
 
     async def trigger_pubsub_ingestion(self, envelope: PubSubPushEnvelope) -> IngestResponse:
         event = self._decode_uploaded_event(envelope)
-        response = await self.trigger_ingestion(
+        return await self.trigger_ingestion(
             IngestRequest(
                 file_url=event.gcsUrl,
                 document_id=event.documentId,
                 document_type=event.documentType or "PDF",
-                metadata={"title": event.originalFileName},
-            )
+                metadata={
+                    "title": event.originalFileName,
+                    "domain": (event.domain or "general"),
+                    "effective_status": (event.effectiveStatus or "unknown"),
+                },
+            ),
+            task_id=self._pubsub_task_id(envelope.message.messageId, event.documentId),
         )
-        if response.status.upper() == "FAILED":
-            raise RuntimeError(response.message)
-        return response
 
     def list_jobs(self) -> List[IngestionJob]:
         if self.db is None:
@@ -230,10 +253,14 @@ class IngestionService:
                 "service_status": "ok",
             }
         chunks_total = self.db.query(func.coalesce(func.sum(DocumentRecordModel.chunks_count), 0)).scalar() or 0
-        jobs_failed = self.db.query(IngestionJobRecord).filter(IngestionJobRecord.status == "failed").count()
+        jobs_failed = (
+            self.db.query(DocumentRecordModel)
+            .filter(DocumentRecordModel.ingestion_status == "failed")
+            .count()
+        )
         jobs_processing = (
-            self.db.query(IngestionJobRecord)
-            .filter(IngestionJobRecord.status.in_(("queued", "processing")))
+            self.db.query(DocumentRecordModel)
+            .filter(DocumentRecordModel.ingestion_status.in_(("queued", "processing")))
             .count()
         )
         return {
@@ -377,8 +404,8 @@ class IngestionService:
                 title=_title_from_request(request),
                 source_url=request.file_url or "",
                 document_type=request.document_type,
-                domain=str(metadata.get("domain", "general")),
-                effective_status=str(metadata.get("effective_status", "unknown")),
+                domain=_metadata_value(metadata, "domain", "general"),
+                effective_status=_metadata_value(metadata, "effective_status", "unknown"),
                 enabled=True,
                 chunks_count=0,
                 ingestion_status="processing",
@@ -391,8 +418,8 @@ class IngestionService:
         row.title = _title_from_request(request)
         row.source_url = request.file_url or row.source_url
         row.document_type = request.document_type or row.document_type
-        row.domain = str(metadata.get("domain", row.domain or "general"))
-        row.effective_status = str(metadata.get("effective_status", row.effective_status or "unknown"))
+        row.domain = _metadata_value(metadata, "domain", row.domain or "general")
+        row.effective_status = _metadata_value(metadata, "effective_status", row.effective_status or "unknown")
         row.ingestion_status = "processing"
         row.updated_at = started_at
         return row
@@ -447,6 +474,16 @@ class IngestionService:
             return
         self.db.commit()
 
+    def _rollback(self) -> None:
+        if self.db is None:
+            return
+        self.db.rollback()
+
+    def _get_job(self, task_id: str) -> Optional[IngestionJobRecord]:
+        if self.db is None:
+            return None
+        return self.db.query(IngestionJobRecord).filter(IngestionJobRecord.task_id == task_id).first()
+
     @staticmethod
     def _decode_uploaded_event(envelope: PubSubPushEnvelope) -> DocumentUploadedEvent:
         try:
@@ -454,6 +491,12 @@ class IngestionService:
             return DocumentUploadedEvent.model_validate(json.loads(payload))
         except Exception as exc:
             raise RuntimeError("Invalid Pub/Sub upload event payload") from exc
+
+    @staticmethod
+    def _pubsub_task_id(message_id: Optional[str], document_id: str) -> str:
+        dedupe_key = message_id or f"document:{document_id}"
+        digest = hashlib.sha1(dedupe_key.encode("utf-8")).hexdigest()[:24]
+        return f"pubsub_{digest}"
 
     @staticmethod
     def _document_to_schema(row: DocumentRecordModel) -> DocumentRecord:
@@ -483,4 +526,14 @@ class IngestionService:
             error=row.error,
             started_at=_iso(row.started_at),
             finished_at=_iso(row.finished_at) or None,
+        )
+
+    @staticmethod
+    def _job_response(row: IngestionJobRecord) -> IngestResponse:
+        return IngestResponse(
+            task_id=row.task_id,
+            status=row.status.upper(),
+            message=row.error or row.message,
+            document_id=row.document_id,
+            chunks_indexed=row.chunks_indexed,
         )

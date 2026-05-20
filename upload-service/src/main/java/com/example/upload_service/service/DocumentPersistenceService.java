@@ -30,11 +30,13 @@ public class DocumentPersistenceService {
                 document_id, title, source_url, document_type, domain, effective_status,
                 enabled, chunks_count, ingestion_status, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, 'general', 'unknown', TRUE, 0, 'queued', NOW(), NOW())
+            VALUES (?, ?, ?, ?, ?, ?, TRUE, 0, 'queued', NOW(), NOW())
             ON CONFLICT (document_id) DO UPDATE SET
                 title = EXCLUDED.title,
                 source_url = EXCLUDED.source_url,
                 document_type = EXCLUDED.document_type,
+                domain = EXCLUDED.domain,
+                effective_status = EXCLUDED.effective_status,
                 enabled = TRUE,
                 ingestion_status = 'queued',
                 updated_at = NOW()
@@ -47,13 +49,22 @@ public class DocumentPersistenceService {
         jdbcTemplate.execute(CREATE_DOCUMENTS_TABLE_SQL);
     }
 
-    public void upsertUploadedDocument(String documentId, String title, String sourceUrl, String documentType) {
+    public void upsertUploadedDocument(
+            String documentId,
+            String title,
+            String sourceUrl,
+            String documentType,
+            String domain,
+            String effectiveStatus
+    ) {
         jdbcTemplate.update(
                 UPSERT_DOCUMENT_SQL,
                 documentId,
                 title,
                 sourceUrl,
-                documentType
+                documentType,
+                domain,
+                effectiveStatus
         );
     }
 }

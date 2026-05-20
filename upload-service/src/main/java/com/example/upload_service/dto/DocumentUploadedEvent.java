@@ -15,6 +15,8 @@ public class DocumentUploadedEvent {
     private String originalFileName;
     private String gcsUrl;
     private String documentType;
+    private String domain;
+    private String effectiveStatus;
     private long sizeBytes;
     private String contentType;
     private long uploadedAtEpoch;

@@ -58,6 +58,8 @@ class DocumentUploadedEvent(BaseModel):
     originalFileName: str
     gcsUrl: str
     documentType: str = "PDF"
+    domain: Optional[str] = None
+    effectiveStatus: Optional[str] = None
     sizeBytes: int
     contentType: str
     uploadedAtEpoch: int

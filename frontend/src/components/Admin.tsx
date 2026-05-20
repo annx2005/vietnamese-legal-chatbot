@@ -163,7 +163,7 @@ function Documents() {
     }
     setStatus("Đang gửi tài liệu...");
     try {
-      await api.upload(file);
+      await api.upload(file, { domain });
       setStatus("Đã upload tài liệu. Hệ thống đang ingest nền, trạng thái sẽ tự cập nhật.");
       await refresh();
     } catch (err) {

@@ -71,7 +71,7 @@ public class UploadService {
         }
     }
 
-    public UploadResponse uploadFile(MultipartFile file) {
+    public UploadResponse uploadFile(MultipartFile file, String domain, String effectiveStatus) {
         if (storage == null || publisher == null) {
             throw new RuntimeException(
                     "Google Cloud clients are not initialized. Run gcloud auth application-default login or mount a valid JSON credential into the configured container path."
@@ -87,6 +87,9 @@ public class UploadService {
             throw new RuntimeException("Only PDF files are allowed");
         }
 
+        String normalizedDomain = normalizeMetadataValue(domain, "general");
+        String normalizedEffectiveStatus = normalizeMetadataValue(effectiveStatus, "unknown");
+
         try {
             // 2. Upload to Google Cloud Storage
             String documentId = "doc_" + UUID.randomUUID().toString().replace("-", "");
@@ -101,7 +104,14 @@ public class UploadService {
             
             String gcsUrl = String.format("gs://%s/%s", bucketName, generatedFileName);
             log.info("Successfully uploaded file to {}", gcsUrl);
-            documentPersistenceService.upsertUploadedDocument(documentId, originalFilename, gcsUrl, "PDF");
+            documentPersistenceService.upsertUploadedDocument(
+                    documentId,
+                    originalFilename,
+                    gcsUrl,
+                    "PDF",
+                    normalizedDomain,
+                    normalizedEffectiveStatus
+            );
 
             // 3. Publish message to Pub/Sub
             DocumentUploadedEvent event = DocumentUploadedEvent.builder()
@@ -110,6 +120,8 @@ public class UploadService {
                     .originalFileName(originalFilename)
                     .gcsUrl(gcsUrl)
                     .documentType("PDF")
+                    .domain(normalizedDomain)
+                    .effectiveStatus(normalizedEffectiveStatus)
                     .sizeBytes(file.getSize())
                     .contentType(file.getContentType())
                     .uploadedAtEpoch(Instant.now().toEpochMilli())
@@ -139,5 +151,13 @@ public class UploadService {
             log.error("Error during file upload and event publishing", e);
             throw new RuntimeException("Failed to process file upload", e);
         }
+    }
+
+    private String normalizeMetadataValue(String value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? fallback : normalized;
     }
 }

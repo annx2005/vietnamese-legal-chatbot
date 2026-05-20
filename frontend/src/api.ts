@@ -89,10 +89,18 @@ export const api = {
       cacheTtl: 5 * 60 * 1000 // 5 minutes cache for same query
     });
   },
-  async upload(file: File) {
+  async upload(file: File, metadata?: { domain?: string; effectiveStatus?: string }) {
     clearApiCache();
     const form = new FormData();
     form.append("file", file);
+    const domain = metadata?.domain?.trim();
+    if (domain) {
+      form.append("domain", domain);
+    }
+    const effectiveStatus = metadata?.effectiveStatus?.trim();
+    if (effectiveStatus) {
+      form.append("effectiveStatus", effectiveStatus);
+    }
     return request<{ documentId: string; fileUrl: string; ingestionStatus: string }>("/api/v1/upload/files", {
       method: "POST",
       body: form,

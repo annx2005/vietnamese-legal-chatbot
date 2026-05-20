@@ -43,6 +43,7 @@ async def handle_uploaded_document_event(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return {
         "status": "accepted",
+        "ingestion_status": response.status,
         "document_id": response.document_id,
         "task_id": response.task_id,
         "chunks_indexed": response.chunks_indexed,
