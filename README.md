@@ -1,4 +1,4 @@
-# Legal RAG Chatbot 
+# Vietnamese Legal RAG Chatbot 
 
 A Microservice Vietnamese legal chatbot with public chat, admin document ingestion, RAG citations, and reviewable chat logs.
 
