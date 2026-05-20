@@ -121,10 +121,14 @@ services:
     ports:
       - "${RAG_SERVICE_PORT:-8000}:8000"
     environment:
+      - QDRANT_URL=${QDRANT_URL:-}
+      - CLUSTER_ENDPOINT=${CLUSTER_ENDPOINT:-}
       - GCP_PROJECT_ID=${PROJECT_ID}
       - GCP_LOCATION=${GCP_REGION:-asia-southeast1}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - CLOUD_QDRANT_API_KEY=${CLOUD_QDRANT_API_KEY:-}
       - COLLECTION_NAME=${COLLECTION_NAME:-legal_documents}
       - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-text-embedding-005}
       - LLM_MODEL_NAME=${LLM_MODEL_NAME:-gemini-2.5-flash}
@@ -151,8 +155,12 @@ services:
     ports:
       - "${INGESTION_SERVICE_PORT:-8001}:8000"
     environment:
+      - QDRANT_URL=${QDRANT_URL:-}
+      - CLUSTER_ENDPOINT=${CLUSTER_ENDPOINT:-}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
+      - QDRANT_API_KEY=${QDRANT_API_KEY:-}
+      - CLOUD_QDRANT_API_KEY=${CLOUD_QDRANT_API_KEY:-}
       - COLLECTION_NAME=${COLLECTION_NAME:-legal_documents}
       - GCP_PROJECT_ID=${PROJECT_ID}
       - GCP_LOCATION=${GCP_REGION:-asia-southeast1}

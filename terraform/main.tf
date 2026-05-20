@@ -233,6 +233,13 @@ resource "google_project_iam_member" "artifact_registry_writer" {
   member  = "serviceAccount:${module.cicd_service_account.email}"
 }
 
+# CI/CD SA cần quyền cập nhật Pub/Sub subscription push endpoint
+resource "google_project_iam_member" "pubsub_editor" {
+  project = var.project_id
+  role    = "roles/pubsub.editor"
+  member  = "serviceAccount:${module.cicd_service_account.email}"
+}
+
 # Lấy ID chuẩn của App SA để cấp quyền gắn vào Cloud Run
 data "google_service_account" "app_sa_data" {
   account_id = module.app_service_account.email

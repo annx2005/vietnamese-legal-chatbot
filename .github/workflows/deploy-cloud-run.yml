@@ -45,12 +45,12 @@ jobs:
             secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest,SPRING_DATASOURCE_PASSWORD=legal-rag-db-password-prod:latest"
           - service: ingestion-service
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
-            env_vars: "GCP_PROJECT_ID=legal-chatbot-496302,GCP_LOCATION=asia-southeast1,GCS_BUCKET_NAME=legal-rag-documents-prod,PUBSUB_TOPIC=legal-document-uploaded-prod,CLOUD_SQL_CONNECTION_NAME=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod,DB_USER=legal_app_user,DB_NAME=metadata_db"
-            secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest"
+            env_vars: "GCP_PROJECT_ID=legal-chatbot-496302,GCP_LOCATION=asia-southeast1,GCS_BUCKET_NAME=legal-rag-documents-prod,PUBSUB_TOPIC=legal-document-uploaded-prod,CLOUD_SQL_CONNECTION_NAME=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod,DB_USER=legal_app_user,DB_NAME=metadata_db,COLLECTION_NAME=legal_documents,EMBEDDING_MODEL_NAME=text-embedding-005"
+            secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest,QDRANT_URL=qdrant-url-prod:latest,QDRANT_API_KEY=qdrant-api-key-prod:latest"
           - service: rag-service
             cloudsql: "legal-chatbot-496302:asia-southeast1:legal-rag-db-prod"
-            env_vars: "GCP_PROJECT_ID=legal-chatbot-496302,GCP_LOCATION=asia-southeast1,CLOUD_SQL_CONNECTION_NAME=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod,DB_USER=legal_app_user,DB_NAME=metadata_db"
-            secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest"
+            env_vars: "GCP_PROJECT_ID=legal-chatbot-496302,GCP_LOCATION=asia-southeast1,CLOUD_SQL_CONNECTION_NAME=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod,DB_USER=legal_app_user,DB_NAME=metadata_db,COLLECTION_NAME=legal_documents,EMBEDDING_MODEL_NAME=text-embedding-005,LLM_MODEL_NAME=gemini-2.5-flash"
+            secrets: "DB_PASSWORD=legal-rag-db-password-prod:latest,QDRANT_URL=qdrant-url-prod:latest,QDRANT_API_KEY=qdrant-api-key-prod:latest"
 
     steps:
       - name: Checkout Source Code

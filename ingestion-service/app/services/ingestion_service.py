@@ -84,15 +84,24 @@ def _title_from_request(request: IngestRequest) -> str:
     return "Legal document"
 
 
+def _qdrant_client_kwargs() -> dict:
+    kwargs = {}
+    if settings.QDRANT_URL:
+        kwargs["url"] = settings.QDRANT_URL
+    else:
+        kwargs["host"] = settings.QDRANT_HOST
+        kwargs["port"] = settings.QDRANT_PORT
+    if settings.QDRANT_API_KEY:
+        kwargs["api_key"] = settings.QDRANT_API_KEY
+    return kwargs
+
+
 class IngestionService:
     def __init__(self, db: Optional[Session] = None):
         self.db = db
         self.qdrant = None
         if QdrantClient is not None:
-            kwargs = {"host": settings.QDRANT_HOST, "port": settings.QDRANT_PORT}
-            if settings.QDRANT_API_KEY:
-                kwargs["api_key"] = settings.QDRANT_API_KEY
-            self.qdrant = QdrantClient(**kwargs)
+            self.qdrant = QdrantClient(**_qdrant_client_kwargs())
 
     async def trigger_ingestion(self, request: IngestRequest) -> IngestResponse:
         task_id = f"task_{uuid.uuid4().hex[:10]}"

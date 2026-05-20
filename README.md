@@ -41,7 +41,16 @@ For easiest local testing without GCS, use the admin `file URL` field with a loc
 
 ## Import Hugging Face Legal Dataset
 
-The ingestion service includes a small importer for `vohuutridung/vietnamese-legal-documents`. It imports a limited demo sample, filters common legal sectors, chunks the text, and upserts vectors into the Qdrant collection `legal_documents`.
+The ingestion service includes a small importer for `vohuutridung/vietnamese-legal-documents`. It imports a limited demo sample across all domains by default, chunks the text, and upserts vectors into the Qdrant collection `legal_documents`.
+
+If `QDRANT_URL` is set, the importer and runtime services connect to Qdrant Cloud using `QDRANT_API_KEY`. Otherwise they fall back to local `QDRANT_HOST` and `QDRANT_PORT`.
+
+To import directly into Qdrant Cloud from local Docker, set these in `.env` first:
+
+```bash
+QDRANT_URL=https://your-cluster-endpoint
+QDRANT_API_KEY=your-qdrant-api-key
+```
 
 Rebuild the ingestion image after dependency changes:
 
@@ -53,15 +62,16 @@ Import a small demo sample:
 
 ```bash
 docker compose exec ingestion-service python scripts/import_hf_legal_documents.py \
-  --limit 300 \
-  --domains dan-su,dat-dai,lao-dong
+  --limit 300
 ```
+
+After the import finishes, restart or redeploy `rag-service` so new Cloud Qdrant settings are picked up before testing chat.
 
 Useful options:
 
 ```bash
 --limit 200              # keep demo imports small; 200-1000 is enough for class demos
---domains ""             # disable domain filtering
+--domains dan-su,dat-dai # optionally restrict imports to selected legal domains
 --batch-size 64          # Qdrant upsert batch size
 ```
 

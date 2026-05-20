@@ -1,3 +1,4 @@
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -6,9 +7,12 @@ class Settings(BaseSettings):
     GCP_LOCATION: str = "asia-southeast1"
     PUBSUB_TOPIC: str = "document-ingestion-topic"
     GCS_BUCKET_NAME: str = "legal-documents-storage"
+    QDRANT_URL: str = ""
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_API_KEY: str = ""
+    LEGACY_QDRANT_URL: str = Field(default="", validation_alias="CLUSTER_ENDPOINT")
+    LEGACY_QDRANT_API_KEY: str = Field(default="", validation_alias="CLOUD_QDRANT_API_KEY")
     COLLECTION_NAME: str = "legal_documents"
     EMBEDDING_MODEL_NAME: str = "text-embedding-005"
     VECTOR_SIZE: int = 384
@@ -25,5 +29,13 @@ class Settings(BaseSettings):
     CLOUD_SQL_CONNECTION_NAME: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    @model_validator(mode="after")
+    def _normalize_qdrant_config(self) -> "Settings":
+        if not self.QDRANT_URL and self.LEGACY_QDRANT_URL:
+            self.QDRANT_URL = self.LEGACY_QDRANT_URL
+        if (not self.QDRANT_API_KEY or self.QDRANT_API_KEY == "your-qdrant-api-key-here") and self.LEGACY_QDRANT_API_KEY:
+            self.QDRANT_API_KEY = self.LEGACY_QDRANT_API_KEY
+        return self
 
 settings = Settings()

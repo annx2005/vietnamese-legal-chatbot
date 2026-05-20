@@ -21,7 +21,6 @@ from app.services.vertex_ai_service import VertexAIEmbeddingService
 
 
 DATASET_NAME = "vohuutridung/vietnamese-legal-documents"
-DEFAULT_DOMAINS = ("dan-su", "dat-dai", "lao-dong")
 
 DOMAIN_KEYWORDS = {
     "dan-su": ("dan su", "hop dong", "nghia vu", "quyen dan su", "bo luat dan su"),
@@ -149,6 +148,18 @@ def ensure_collection(client: QdrantClient) -> None:
         )
 
 
+def qdrant_client_kwargs() -> dict:
+    kwargs = {}
+    if settings.QDRANT_URL:
+        kwargs["url"] = settings.QDRANT_URL
+    else:
+        kwargs["host"] = settings.QDRANT_HOST
+        kwargs["port"] = settings.QDRANT_PORT
+    if settings.QDRANT_API_KEY:
+        kwargs["api_key"] = settings.QDRANT_API_KEY
+    return kwargs
+
+
 def batched(items: Iterable[PointStruct], batch_size: int) -> Iterable[List[PointStruct]]:
     batch: List[PointStruct] = []
     for item in items:
@@ -239,8 +250,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=300, help="Number of documents to import. Use 200-1000 for demos.")
     parser.add_argument(
         "--domains",
-        default=",".join(DEFAULT_DOMAINS),
-        help="Comma-separated domain filters: dan-su,dat-dai,lao-dong. Use empty string to disable filtering.",
+        default="",
+        help="Comma-separated domain filters. Default imports all domains; example: dan-su,dat-dai,lao-dong.",
     )
     parser.add_argument("--batch-size", type=int, default=64, help="Qdrant upsert batch size.")
     parser.add_argument(
@@ -342,12 +353,9 @@ def main() -> None:
     print(f"Selecting up to {args.limit} documents from {DATASET_NAME} for domains: {domains or 'all'}")
     metadata_by_id = select_metadata(args.limit, domains)
     if not metadata_by_id:
-        raise RuntimeError("No matching metadata rows found. Try --domains '' or a larger limit.")
+        raise RuntimeError("No matching metadata rows found. Try a larger --limit or verify dataset access.")
 
-    client_kwargs = {"host": settings.QDRANT_HOST, "port": settings.QDRANT_PORT}
-    if settings.QDRANT_API_KEY:
-        client_kwargs["api_key"] = settings.QDRANT_API_KEY
-    client = QdrantClient(**client_kwargs)
+    client = QdrantClient(**qdrant_client_kwargs())
     ensure_collection(client)
 
     total_points = 0

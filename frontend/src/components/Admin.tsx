@@ -84,7 +84,7 @@ function Dashboard() {
 function Documents() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [file, setFile] = useState<File | null>(null);
-  const [domain, setDomain] = useState("dan-su");
+  const [domain, setDomain] = useState("");
   const [status, setStatus] = useState("");
 
   async function refresh() {
@@ -109,7 +109,7 @@ function Documents() {
         file_url: uploaded.fileUrl,
         document_id: uploaded.documentId,
         document_type: "PDF",
-        metadata: { title: file.name, domain }
+        metadata: { title: file.name, domain: domain.trim() || "general" }
       });
       setStatus("Đã tạo job ingest.");
       await refresh();
@@ -132,12 +132,11 @@ function Documents() {
         </label>
         <label>
           Lĩnh vực
-          <select value={domain} onChange={(event) => setDomain(event.target.value)}>
-            <option value="dan-su">Dân sự</option>
-            <option value="dat-dai">Đất đai</option>
-            <option value="lao-dong">Lao động</option>
-            <option value="general">Chung</option>
-          </select>
+          <input
+            placeholder="Ví dụ: hình sự, thuế, doanh nghiệp..."
+            value={domain}
+            onChange={(event) => setDomain(event.target.value)}
+          />
         </label>
         <button className="primary">
           <Upload size={18} /> Ingest
