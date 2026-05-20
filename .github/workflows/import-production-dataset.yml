@@ -1,0 +1,85 @@
+name: Import Production Dataset
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Number of documents to import. Use 0 for full dataset."
+        required: true
+        default: "0"
+
+env:
+  PROJECT_ID: legal-chatbot-496302
+  REGION: asia-southeast1
+  ENV: prod
+  WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider"
+  CICD_SERVICE_ACCOUNT: "legal-rag-cicd-prod@legal-chatbot-496302.iam.gserviceaccount.com"
+  APP_SERVICE_ACCOUNT: "legal-rag-app-prod@legal-chatbot-496302.iam.gserviceaccount.com"
+  JOB_NAME: hf-import-prod
+  CLOUD_SQL_INSTANCE: legal-chatbot-496302:asia-southeast1:legal-rag-db-prod
+  COLLECTION_NAME: legal_documents_prod
+
+jobs:
+  import-production-dataset:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      id-token: "write"
+    steps:
+      - name: Google Auth (Workload Identity Federation)
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
+          service_account: "${{ env.CICD_SERVICE_ACCOUNT }}"
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve Ingestion Image
+        id: image
+        run: |-
+          echo "image=$(gcloud run services describe ingestion-service-${{ env.ENV }} \
+            --region=${{ env.REGION }} \
+            --format='value(spec.template.spec.containers[0].image)')" >> "$GITHUB_OUTPUT"
+
+      - name: Create or Update Import Job
+        env:
+          IMPORT_LIMIT: ${{ github.event.inputs.limit }}
+        run: |-
+          JOB_EXISTS=false
+          if gcloud run jobs describe "${{ env.JOB_NAME }}" --region="${{ env.REGION }}" >/dev/null 2>&1; then
+            JOB_EXISTS=true
+          fi
+
+          ARGS="scripts/import_hf_legal_documents.py,--limit,${IMPORT_LIMIT}"
+
+          COMMON_FLAGS=(
+            --project="${{ env.PROJECT_ID }}"
+            --region="${{ env.REGION }}"
+            --image="${{ steps.image.outputs.image }}"
+            --service-account="${{ env.APP_SERVICE_ACCOUNT }}"
+            --set-cloudsql-instances="${{ env.CLOUD_SQL_INSTANCE }}"
+            --set-env-vars="GCP_PROJECT_ID=${{ env.PROJECT_ID }},GCP_LOCATION=${{ env.REGION }},GCS_BUCKET_NAME=vietnamese-legal-rag-documents,PUBSUB_TOPIC=legal-document-uploaded-prod,CLOUD_SQL_CONNECTION_NAME=${{ env.CLOUD_SQL_INSTANCE }},DB_USER=legal_app_user,DB_NAME=metadata_db,COLLECTION_NAME=${{ env.COLLECTION_NAME }},EMBEDDING_MODEL_NAME=text-embedding-005"
+            --set-secrets="DB_PASSWORD=legal-rag-db-password-prod:latest,QDRANT_URL=qdrant-url-prod:latest,QDRANT_API_KEY=qdrant-api-key-prod:latest"
+            --command=python
+            --args="${ARGS}"
+            --task-timeout=3600s
+            --memory=2Gi
+            --cpu=2
+            --max-retries=0
+          )
+
+          if [ "${JOB_EXISTS}" = true ]; then
+            gcloud run jobs update "${{ env.JOB_NAME }}" "${COMMON_FLAGS[@]}"
+          else
+            gcloud run jobs create "${{ env.JOB_NAME }}" "${COMMON_FLAGS[@]}"
+          fi
+
+      - name: Execute Import Job
+        run: |-
+          gcloud run jobs execute "${{ env.JOB_NAME }}" \
+            --project="${{ env.PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --wait
