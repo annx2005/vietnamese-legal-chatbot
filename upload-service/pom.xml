@@ -83,6 +83,11 @@
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
 		</dependency>
+		<dependency>
+			<groupId>com.google.cloud.sql</groupId>
+			<artifactId>postgres-socket-factory</artifactId>
+			<version>1.28.3</version>
+		</dependency>
 
 		<!-- Google Cloud Storage -->
 		<dependency>
