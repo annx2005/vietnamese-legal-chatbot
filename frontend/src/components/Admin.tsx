@@ -19,6 +19,10 @@ import { api } from "../api";
 import { DocumentRecord, IngestionJob } from "../types";
 import { Metric, PanelTitle, StatusBadge, EmptyState } from "./Common";
 
+const DASHBOARD_POLL_INTERVAL_MS = 10000;
+const DOCUMENTS_POLL_INTERVAL_MS = 5000;
+const JOBS_POLL_INTERVAL_MS = 5000;
+
 export function Admin() {
   const [tab, setTab] = useState("dashboard");
 
@@ -77,18 +81,25 @@ function Dashboard() {
     reviewed: 0
   });
 
-  useEffect(() => {
-    Promise.allSettled([api.ingestStats(), api.ragStats()]).then(([ingest, rag]) => {
-      setStats({
-        documents: ingest.status === "fulfilled" ? ingest.value.documents_total : 0,
-        chunks: ingest.status === "fulfilled" ? ingest.value.chunks_total : 0,
-        failed: ingest.status === "fulfilled" ? ingest.value.jobs_failed : 0,
-        processing: ingest.status === "fulfilled" ? ingest.value.jobs_processing : 0,
-        logs: rag.status === "fulfilled" ? rag.value.chat_logs_total : 0,
-        low: rag.status === "fulfilled" ? rag.value.low_confidence_total : 0,
-        reviewed: rag.status === "fulfilled" ? rag.value.reviewed_total : 0
-      });
+  async function refresh() {
+    const [ingest, rag] = await Promise.allSettled([api.ingestStats(), api.ragStats()]);
+    setStats({
+      documents: ingest.status === "fulfilled" ? ingest.value.documents_total : 0,
+      chunks: ingest.status === "fulfilled" ? ingest.value.chunks_total : 0,
+      failed: ingest.status === "fulfilled" ? ingest.value.jobs_failed : 0,
+      processing: ingest.status === "fulfilled" ? ingest.value.jobs_processing : 0,
+      logs: rag.status === "fulfilled" ? rag.value.chat_logs_total : 0,
+      low: rag.status === "fulfilled" ? rag.value.low_confidence_total : 0,
+      reviewed: rag.status === "fulfilled" ? rag.value.reviewed_total : 0
     });
+  }
+
+  useEffect(() => {
+    refresh().catch(() => undefined);
+    const timer = window.setInterval(() => {
+      refresh().catch(() => undefined);
+    }, DASHBOARD_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
   }, []);
 
   return (
@@ -138,6 +149,10 @@ function Documents() {
 
   useEffect(() => {
     refresh().catch(() => undefined);
+    const timer = window.setInterval(() => {
+      refresh().catch(() => undefined);
+    }, DOCUMENTS_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
   }, []);
 
   async function uploadAndIngest(event: FormEvent) {
@@ -148,14 +163,8 @@ function Documents() {
     }
     setStatus("Đang gửi tài liệu...");
     try {
-      const uploaded = await api.upload(file);
-      await api.ingest({
-        file_url: uploaded.fileUrl,
-        document_id: uploaded.documentId,
-        document_type: "PDF",
-        metadata: { title: file.name, domain: domain.trim() || "general" }
-      });
-      setStatus("Đã tạo job ingest.");
+      await api.upload(file);
+      setStatus("Đã upload tài liệu. Hệ thống đang ingest nền, trạng thái sẽ tự cập nhật.");
       await refresh();
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Không ingest được tài liệu");
@@ -338,6 +347,10 @@ function Jobs() {
 
   useEffect(() => {
     refresh().catch(() => undefined);
+    const timer = window.setInterval(() => {
+      refresh().catch(() => undefined);
+    }, JOBS_POLL_INTERVAL_MS);
+    return () => window.clearInterval(timer);
   }, []);
 
   async function retry(taskId: string) {

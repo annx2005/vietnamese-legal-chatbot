@@ -110,10 +110,10 @@ export const api = {
     );
   },
   async documents() {
-    return request<{ documents: DocumentRecord[] }>("/api/v1/ingest/documents", { cacheTtl: 10000 });
+    return request<{ documents: DocumentRecord[] }>("/api/v1/ingest/documents");
   },
   async jobs() {
-    return request<{ jobs: IngestionJob[] }>("/api/v1/ingest/jobs", { cacheTtl: 5000 });
+    return request<{ jobs: IngestionJob[] }>("/api/v1/ingest/jobs");
   },
   async retry(taskId: string) {
     clearApiCache();
@@ -129,12 +129,12 @@ export const api = {
   },
   async ingestStats() {
     return request<{ documents_total: number; chunks_total: number; jobs_failed: number; jobs_processing: number }>(
-      "/api/v1/ingest/admin/stats", { cacheTtl: 15000 }
+      "/api/v1/ingest/admin/stats"
     );
   },
   async ragStats() {
     return request<{ chat_logs_total: number; low_confidence_total: number; reviewed_total: number }>(
-      "/api/v1/admin/stats", { cacheTtl: 15000 }
+      "/api/v1/admin/stats"
     );
   },
   async chatLogs() {
