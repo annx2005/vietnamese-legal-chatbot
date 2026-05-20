@@ -13,6 +13,7 @@ import com.google.pubsub.v1.PubsubMessage;
 import com.google.pubsub.v1.TopicName;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -25,6 +26,7 @@ import java.util.concurrent.ExecutionException;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class UploadService {
 
     @Value("${spring.cloud.gcp.project-id}")
@@ -39,6 +41,7 @@ public class UploadService {
     private Storage storage;
     private Publisher publisher;
     private final Gson gson = new Gson();
+    private final DocumentPersistenceService documentPersistenceService;
 
     @PostConstruct
     public void init() {
@@ -98,6 +101,7 @@ public class UploadService {
             
             String gcsUrl = String.format("gs://%s/%s", bucketName, generatedFileName);
             log.info("Successfully uploaded file to {}", gcsUrl);
+            documentPersistenceService.upsertUploadedDocument(documentId, originalFilename, gcsUrl, "PDF");
 
             // 3. Publish message to Pub/Sub
             DocumentUploadedEvent event = DocumentUploadedEvent.builder()

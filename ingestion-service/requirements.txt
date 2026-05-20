@@ -8,3 +8,5 @@ pydantic-settings
 httpx
 qdrant-client
 datasets
+sqlalchemy
+psycopg2-binary

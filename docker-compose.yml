@@ -99,6 +99,9 @@ services:
       - UPLOAD_BUCKET_NAME=${UPLOAD_BUCKET_NAME}
       - PUBSUB_TOPIC_NAME=${PUBSUB_TOPIC_NAME}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${DB_NAME:-legal_rag_db}
+      - SPRING_DATASOURCE_USERNAME=${DB_USER:-postgres}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASSWORD:-postgres}
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/var/run/gcp/application_default_credentials.json}
     volumes:
       - type: bind
@@ -107,6 +110,8 @@ services:
         read_only: true
     networks:
       - legal-network
+    depends_on:
+      - postgres
     restart: unless-stopped
 
   rag-service:
@@ -155,6 +160,7 @@ services:
       - GCS_BUCKET_NAME=${UPLOAD_BUCKET_NAME}
       - EMBEDDING_MODEL_NAME=${EMBEDDING_MODEL_NAME:-text-embedding-005}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-jwt-key-change-in-production}
+      - DATABASE_URL=postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-legal_rag_db}
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-/var/run/gcp/application_default_credentials.json}
     volumes:
       - type: bind
@@ -165,6 +171,7 @@ services:
       - legal-network
     depends_on:
       - qdrant
+      - postgres
     restart: unless-stopped
 
 networks:

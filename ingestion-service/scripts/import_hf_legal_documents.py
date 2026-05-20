@@ -4,6 +4,7 @@ import sys
 import re
 import unicodedata
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence
 
@@ -14,6 +15,8 @@ from qdrant_client.http.models import Distance, PointStruct, VectorParams
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.core.config import settings
+from app.db.models import Base, DocumentRecordModel, IngestionJobRecord
+from app.db.session import SessionLocal, engine
 from app.services.vertex_ai_service import VertexAIEmbeddingService
 
 
@@ -256,6 +259,80 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def persist_import_state(metadata_by_id: Dict[int, dict], chunk_counts: Dict[str, int]) -> None:
+    finished_at = datetime.now(timezone.utc)
+    try:
+        Base.metadata.create_all(bind=engine)
+        db = SessionLocal()
+    except Exception as exc:
+        print(f"Warning: could not initialize PostgreSQL persistence for HF import: {exc}", file=sys.stderr)
+        return
+
+    try:
+        for raw_document_id, metadata in metadata_by_id.items():
+            document_id = str(raw_document_id)
+            source_url = metadata["url"] or f"hf://{DATASET_NAME}/{document_id}"
+            row = (
+                db.query(DocumentRecordModel)
+                .filter(DocumentRecordModel.document_id == document_id)
+                .first()
+            )
+            if row is None:
+                row = DocumentRecordModel(
+                    document_id=document_id,
+                    title=metadata["title"],
+                    source_url=source_url,
+                    document_type="TEXT",
+                    domain=metadata["legal_sectors"] or "general",
+                    effective_status="unknown",
+                    enabled=True,
+                    created_at=finished_at,
+                    updated_at=finished_at,
+                )
+                db.add(row)
+            row.title = metadata["title"]
+            row.source_url = source_url
+            row.document_type = "TEXT"
+            row.domain = metadata["legal_sectors"] or "general"
+            row.effective_status = "unknown"
+            row.enabled = True
+            row.chunks_count = chunk_counts.get(document_id, 0)
+            row.ingestion_status = "done"
+            row.updated_at = finished_at
+
+            task_id = f"hf_import_{document_id}"
+            job = (
+                db.query(IngestionJobRecord)
+                .filter(IngestionJobRecord.task_id == task_id)
+                .first()
+            )
+            if job is None:
+                job = IngestionJobRecord(
+                    task_id=task_id,
+                    document_id=document_id,
+                    status="done",
+                    file_url=source_url,
+                    message="Imported from Hugging Face dataset",
+                    started_at=finished_at,
+                    finished_at=finished_at,
+                )
+                db.add(job)
+            job.document_id = document_id
+            job.status = "done"
+            job.file_url = source_url
+            job.message = "Imported from Hugging Face dataset"
+            job.chunks_indexed = chunk_counts.get(document_id, 0)
+            job.error = None
+            job.finished_at = finished_at
+
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"Warning: failed to persist imported document metadata to PostgreSQL: {exc}", file=sys.stderr)
+    finally:
+        db.close()
+
+
 def main() -> None:
     args = parse_args()
     if args.limit < 1:
@@ -274,6 +351,7 @@ def main() -> None:
     ensure_collection(client)
 
     total_points = 0
+    chunk_counts: Dict[str, int] = {}
     points = make_points(
         metadata_by_id,
         args.chunk_size,
@@ -283,8 +361,14 @@ def main() -> None:
     )
     for batch in batched(points, args.batch_size):
         client.upsert(collection_name=settings.COLLECTION_NAME, points=batch)
+        for point in batch:
+            document_id = str((point.payload or {}).get("document_id", ""))
+            if document_id:
+                chunk_counts[document_id] = chunk_counts.get(document_id, 0) + 1
         total_points += len(batch)
         print(f"Upserted {total_points} chunks...")
+
+    persist_import_state(metadata_by_id, chunk_counts)
 
     print(
         f"Imported {len(metadata_by_id)} documents and {total_points} chunks "

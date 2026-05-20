@@ -3,11 +3,15 @@ import io
 import re
 import uuid
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import List, Optional
 from urllib.parse import urlparse
 
 import httpx
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
+from app.db.models import DocumentRecordModel, IngestionJobRecord
 from app.schemas.ingest import DocumentRecord, IngestRequest, IngestResponse, IngestionJob
 from app.services.vertex_ai_service import VertexAIEmbeddingService
 
@@ -23,21 +27,30 @@ except ImportError:  # pragma: no cover - dependency is present in the image
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.http.models import Distance, PointStruct, VectorParams
+    from qdrant_client.http.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 except ImportError:  # pragma: no cover - dependency is present in the image
     QdrantClient = None
     Distance = None
+    FieldCondition = None
+    Filter = None
+    MatchValue = None
     PointStruct = None
     VectorParams = None
 
 
-DOCUMENTS: Dict[str, DocumentRecord] = {}
-JOBS: Dict[str, IngestionJob] = {}
 VERTEX_EMBEDDINGS = VertexAIEmbeddingService()
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso(value: Optional[datetime]) -> str:
+    if value is None:
+        return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.isoformat()
 
 
 def _embedding(text: str) -> List[float]:
@@ -61,8 +74,10 @@ def _title_from_request(request: IngestRequest) -> str:
         return path.rsplit("/", 1)[-1] or "Legal document"
     return "Legal document"
 
+
 class IngestionService:
-    def __init__(self):
+    def __init__(self, db: Optional[Session] = None):
+        self.db = db
         self.qdrant = None
         if QdrantClient is not None:
             kwargs = {"host": settings.QDRANT_HOST, "port": settings.QDRANT_PORT}
@@ -80,66 +95,52 @@ class IngestionService:
                 document_id=request.document_id,
             )
 
+        started_at = _now()
         document_id = request.document_id or f"doc_{uuid.uuid4().hex[:12]}"
-        created_at = _now()
-        document = DocumentRecord(
-            document_id=document_id,
-            title=_title_from_request(request),
-            source_url=request.file_url,
-            document_type=request.document_type,
-            domain=str((request.metadata or {}).get("domain", "general")),
-            effective_status=str((request.metadata or {}).get("effective_status", "unknown")),
-            ingestion_status="processing",
-            created_at=created_at,
-            updated_at=created_at,
-        )
-        DOCUMENTS[document_id] = document
-
-        job = IngestionJob(
-            task_id=task_id,
-            document_id=document_id,
-            status="processing",
-            file_url=request.file_url,
-            message="Ingestion started",
-            started_at=created_at,
-        )
-        JOBS[task_id] = job
+        document_row = self._upsert_processing_document(document_id, request, started_at)
+        job_row = self._create_job(task_id, document_id, request.file_url, started_at)
+        self._commit()
 
         try:
             raw_bytes = await self._load_file(request.file_url)
             text = self._extract_text(raw_bytes, request.file_url, request.document_type)
             chunks = self._chunk_text(text)
-            self._upsert_chunks(document, chunks)
+            self._upsert_chunks(document_row, chunks)
+
             finished_at = _now()
-            document.chunks_count = len(chunks)
-            document.ingestion_status = "done"
-            document.updated_at = finished_at
-            job.status = "done"
-            job.message = "Document indexed successfully"
-            job.chunks_indexed = len(chunks)
-            job.finished_at = finished_at
+            document_row.chunks_count = len(chunks)
+            document_row.ingestion_status = "done"
+            document_row.updated_at = finished_at
+            job_row.status = "done"
+            job_row.message = "Document indexed successfully"
+            job_row.chunks_indexed = len(chunks)
+            job_row.error = None
+            job_row.finished_at = finished_at
         except Exception as exc:
             finished_at = _now()
-            document.ingestion_status = "failed"
-            document.updated_at = finished_at
-            job.status = "failed"
-            job.message = "Document ingestion failed"
-            job.error = str(exc)
-            job.finished_at = finished_at
+            document_row.ingestion_status = "failed"
+            document_row.updated_at = finished_at
+            job_row.status = "failed"
+            job_row.message = "Document ingestion failed"
+            job_row.error = str(exc)
+            job_row.finished_at = finished_at
 
+        self._commit()
         return IngestResponse(
             task_id=task_id,
-            status=job.status.upper(),
-            message=job.error or job.message,
-            document_id=document_id,
-            chunks_indexed=job.chunks_indexed,
+            status=job_row.status.upper(),
+            message=job_row.error or job_row.message,
+            document_id=document_row.document_id,
+            chunks_indexed=job_row.chunks_indexed,
         )
 
     async def retry_job(self, task_id: str) -> Optional[IngestResponse]:
-        job = JOBS.get(task_id)
+        if self.db is None:
+            return None
+        job = self.db.query(IngestionJobRecord).filter(IngestionJobRecord.task_id == task_id).first()
         if not job:
             return None
-        document = DOCUMENTS.get(job.document_id)
+        document = self.db.query(DocumentRecordModel).filter(DocumentRecordModel.document_id == job.document_id).first()
         metadata = {}
         if document:
             metadata = {
@@ -157,32 +158,52 @@ class IngestionService:
         )
 
     def list_jobs(self) -> List[IngestionJob]:
-        return sorted(JOBS.values(), key=lambda item: item.started_at, reverse=True)
+        if self.db is None:
+            return []
+        rows = (
+            self.db.query(IngestionJobRecord)
+            .order_by(IngestionJobRecord.started_at.desc())
+            .all()
+        )
+        return [self._job_to_schema(row) for row in rows]
 
     def list_documents(self) -> List[DocumentRecord]:
-        return sorted(DOCUMENTS.values(), key=lambda item: item.updated_at, reverse=True)
+        if self.db is None:
+            return []
+        rows = (
+            self.db.query(DocumentRecordModel)
+            .order_by(DocumentRecordModel.updated_at.desc())
+            .all()
+        )
+        return [self._document_to_schema(row) for row in rows]
 
     def disable_document(self, document_id: str) -> Optional[DocumentRecord]:
-        document = DOCUMENTS.get(document_id)
-        if document:
-            document.enabled = False
-            document.updated_at = _now()
-        return document
+        return self._set_document_enabled(document_id, False)
 
     def enable_document(self, document_id: str) -> Optional[DocumentRecord]:
-        document = DOCUMENTS.get(document_id)
-        if document:
-            document.enabled = True
-            document.updated_at = _now()
-        return document
+        return self._set_document_enabled(document_id, True)
 
     def admin_stats(self) -> dict:
-        jobs = list(JOBS.values())
+        if self.db is None:
+            return {
+                "documents_total": 0,
+                "chunks_total": 0,
+                "jobs_failed": 0,
+                "jobs_processing": 0,
+                "service_status": "ok",
+            }
+        chunks_total = self.db.query(func.coalesce(func.sum(DocumentRecordModel.chunks_count), 0)).scalar() or 0
+        jobs_failed = self.db.query(IngestionJobRecord).filter(IngestionJobRecord.status == "failed").count()
+        jobs_processing = (
+            self.db.query(IngestionJobRecord)
+            .filter(IngestionJobRecord.status.in_(("queued", "processing")))
+            .count()
+        )
         return {
-            "documents_total": len(DOCUMENTS),
-            "chunks_total": sum(document.chunks_count for document in DOCUMENTS.values()),
-            "jobs_failed": sum(1 for job in jobs if job.status == "failed"),
-            "jobs_processing": sum(1 for job in jobs if job.status in {"queued", "processing"}),
+            "documents_total": self.db.query(DocumentRecordModel).count(),
+            "chunks_total": int(chunks_total),
+            "jobs_failed": jobs_failed,
+            "jobs_processing": jobs_processing,
             "service_status": "ok",
         }
 
@@ -243,7 +264,7 @@ class IngestionService:
             chunks.append(current)
         return chunks
 
-    def _upsert_chunks(self, document: DocumentRecord, chunks: List[str]) -> None:
+    def _upsert_chunks(self, document: DocumentRecordModel, chunks: List[str]) -> None:
         if self.qdrant is None:
             return
         try:
@@ -257,7 +278,7 @@ class IngestionService:
         points = []
         for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
             point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{document.document_id}:{index}"))
-            article_match = re.search(r"(Điều\s+\d+[^\n.]*)", chunk, flags=re.IGNORECASE)
+            article_match = re.search(r"(Äiá»u\s+\d+[^\n.]*)", chunk, flags=re.IGNORECASE)
             points.append(
                 PointStruct(
                     id=point_id,
@@ -292,3 +313,119 @@ class IngestionService:
         except Exception:
             pass
         return [_embedding(chunk) for chunk in chunks]
+
+    def _upsert_processing_document(
+        self,
+        document_id: str,
+        request: IngestRequest,
+        started_at: datetime,
+    ) -> DocumentRecordModel:
+        metadata = request.metadata or {}
+        if self.db is None:
+            raise RuntimeError("Database session is not available")
+        row = self.db.query(DocumentRecordModel).filter(DocumentRecordModel.document_id == document_id).first()
+        if row is None:
+            row = DocumentRecordModel(
+                document_id=document_id,
+                title=_title_from_request(request),
+                source_url=request.file_url or "",
+                document_type=request.document_type,
+                domain=str(metadata.get("domain", "general")),
+                effective_status=str(metadata.get("effective_status", "unknown")),
+                enabled=True,
+                chunks_count=0,
+                ingestion_status="processing",
+                created_at=started_at,
+                updated_at=started_at,
+            )
+            self.db.add(row)
+            return row
+
+        row.title = _title_from_request(request)
+        row.source_url = request.file_url or row.source_url
+        row.document_type = request.document_type or row.document_type
+        row.domain = str(metadata.get("domain", row.domain or "general"))
+        row.effective_status = str(metadata.get("effective_status", row.effective_status or "unknown"))
+        row.ingestion_status = "processing"
+        row.updated_at = started_at
+        return row
+
+    def _create_job(
+        self,
+        task_id: str,
+        document_id: str,
+        file_url: str,
+        started_at: datetime,
+    ) -> IngestionJobRecord:
+        if self.db is None:
+            raise RuntimeError("Database session is not available")
+        row = IngestionJobRecord(
+            task_id=task_id,
+            document_id=document_id,
+            status="processing",
+            file_url=file_url,
+            message="Ingestion started",
+            chunks_indexed=0,
+            started_at=started_at,
+        )
+        self.db.add(row)
+        return row
+
+    def _set_document_enabled(self, document_id: str, enabled: bool) -> Optional[DocumentRecord]:
+        if self.db is None:
+            return None
+        row = self.db.query(DocumentRecordModel).filter(DocumentRecordModel.document_id == document_id).first()
+        if row is None:
+            return None
+        row.enabled = enabled
+        row.updated_at = _now()
+        self._sync_enabled_payload(document_id, enabled)
+        self._commit()
+        return self._document_to_schema(row)
+
+    def _sync_enabled_payload(self, document_id: str, enabled: bool) -> None:
+        if self.qdrant is None or Filter is None or FieldCondition is None or MatchValue is None:
+            return
+        try:
+            self.qdrant.set_payload(
+                collection_name=settings.COLLECTION_NAME,
+                payload={"enabled": enabled},
+                points=Filter(must=[FieldCondition(key="document_id", match=MatchValue(value=document_id))]),
+            )
+        except Exception:
+            return
+
+    def _commit(self) -> None:
+        if self.db is None:
+            return
+        self.db.commit()
+
+    @staticmethod
+    def _document_to_schema(row: DocumentRecordModel) -> DocumentRecord:
+        return DocumentRecord(
+            document_id=row.document_id,
+            title=row.title,
+            source_url=row.source_url,
+            document_type=row.document_type,
+            domain=row.domain,
+            effective_status=row.effective_status,
+            enabled=row.enabled,
+            chunks_count=row.chunks_count,
+            ingestion_status=row.ingestion_status,
+            created_at=_iso(row.created_at),
+            updated_at=_iso(row.updated_at),
+        )
+
+    @staticmethod
+    def _job_to_schema(row: IngestionJobRecord) -> IngestionJob:
+        return IngestionJob(
+            task_id=row.task_id,
+            document_id=row.document_id,
+            status=row.status,
+            file_url=row.file_url,
+            message=row.message,
+            chunks_indexed=row.chunks_indexed,
+            error=row.error,
+            started_at=_iso(row.started_at),
+            finished_at=_iso(row.finished_at) or None,
+        )

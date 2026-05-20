@@ -16,6 +16,13 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 1200
     CHUNK_OVERLAP: int = 160
     JWT_SECRET_KEY: str = "super-secret-jwt-key-change-in-production"
+    DATABASE_URL: str | None = None
+    DB_USER: str = "postgres"
+    DB_PASSWORD: str = "postgres"
+    DB_NAME: str = "legal_rag_db"
+    DB_HOST: str = "localhost"
+    DB_PORT: int = 5432
+    CLOUD_SQL_CONNECTION_NAME: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

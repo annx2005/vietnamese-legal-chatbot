@@ -1,5 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from app.core.auth import require_admin
+from app.db.session import get_db
 from app.schemas.ingest import (
     AdminStatsResponse,
     DocumentListResponse,
@@ -12,8 +15,8 @@ from app.services.ingestion_service import IngestionService
 
 router = APIRouter()
 
-def get_ingestion_service() -> IngestionService:
-    return IngestionService()
+def get_ingestion_service(db: Session = Depends(get_db)) -> IngestionService:
+    return IngestionService(db=db)
 
 @router.post("/", response_model=IngestResponse, summary="Kích hoạt pipeline xử lý tài liệu")
 async def start_ingestion(
