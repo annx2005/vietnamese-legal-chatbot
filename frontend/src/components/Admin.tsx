@@ -1,5 +1,20 @@
 import { FormEvent, useEffect, useState } from "react";
-import { BarChart3, FileText, RefreshCw, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  BarChart3,
+  CheckCircle2,
+  Clock,
+  Database,
+  FileText,
+  FolderOpen,
+  Layers,
+  MessageCircle,
+  RefreshCw,
+  Search,
+  ShieldAlert,
+  Upload,
+  UploadCloud,
+} from "lucide-react";
 import { api } from "../api";
 import { DocumentRecord, IngestionJob } from "../types";
 import { Metric, PanelTitle, StatusBadge, EmptyState } from "./Common";
@@ -8,14 +23,26 @@ export function Admin() {
   const [tab, setTab] = useState("dashboard");
 
   return (
-    <section className="workspace">
-      <header className="page-header">
-        <div>
+    <section className="workspace admin-workspace">
+      <header className="page-hero admin-header">
+        <div className="hero-copy">
           <p className="eyebrow">Admin web</p>
           <h1>Quản trị dữ liệu và chất lượng chatbot</h1>
+          <p>
+            Theo dõi corpus pháp luật, trạng thái ingest và tín hiệu chất lượng câu trả lời trong
+            một bảng điều hành gọn, rõ, dễ kiểm soát.
+          </p>
+        </div>
+        <div className="hero-card compact" aria-hidden="true">
+          <div className="hero-card-icon">
+            <BarChart3 size={24} />
+          </div>
+          <strong>Operations</strong>
+          <span>Corpus health and ingestion control</span>
         </div>
       </header>
-      <div className="tabs">
+
+      <div className="tabs" role="tablist" aria-label="Admin sections">
         <button
           className={tab === "dashboard" ? "tab active" : "tab"}
           onClick={() => setTab("dashboard")}
@@ -66,12 +93,34 @@ function Dashboard() {
 
   return (
     <div className="metrics-grid">
-      <Metric label="Tài liệu" value={stats.documents} />
-      <Metric label="Chunks" value={stats.chunks} />
-      <Metric label="Job lỗi" value={stats.failed} tone={stats.failed ? "bad" : "ok"} />
-      <Metric label="Đang xử lý" value={stats.processing} />
-      <Metric label="Câu hỏi" value={stats.logs} />
-      <Metric label="Low confidence" value={stats.low} tone={stats.low ? "warn" : "ok"} />
+      <Metric
+        label="Tài liệu"
+        value={stats.documents}
+        helper="Tổng văn bản trong corpus"
+        icon={<FolderOpen size={20} />}
+      />
+      <Metric label="Chunks" value={stats.chunks} helper="Đơn vị đã lập chỉ mục" icon={<Layers size={20} />} />
+      <Metric
+        label="Job lỗi"
+        value={stats.failed}
+        tone={stats.failed ? "bad" : "ok"}
+        helper="Cần kiểm tra ingest"
+        icon={stats.failed ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+      />
+      <Metric
+        label="Đang xử lý"
+        value={stats.processing}
+        helper="Job ingest chưa hoàn tất"
+        icon={<Clock size={20} />}
+      />
+      <Metric label="Câu hỏi" value={stats.logs} helper="Lượt truy vấn RAG" icon={<MessageCircle size={20} />} />
+      <Metric
+        label="Low confidence"
+        value={stats.low}
+        tone={stats.low ? "warn" : "ok"}
+        helper="Câu trả lời cần thận trọng"
+        icon={<ShieldAlert size={20} />}
+      />
     </div>
   );
 }
@@ -115,30 +164,52 @@ function Documents() {
 
   return (
     <div className="admin-grid">
-      <form className="tool-panel" onSubmit={uploadAndIngest}>
-        <h2>Nạp tài liệu</h2>
-        <label>
-          PDF upload
+      <form className="tool-panel upload-panel" onSubmit={uploadAndIngest}>
+        <div className="panel-heading">
+          <span className="panel-icon" aria-hidden="true">
+            <UploadCloud size={20} />
+          </span>
+          <div>
+            <span className="section-kicker">Ingestion</span>
+            <h2>Nạp tài liệu</h2>
+          </div>
+        </div>
+
+        <label className="upload-dropzone" htmlFor="pdf-upload">
+          <UploadCloud size={28} />
+          <strong>{file ? file.name : "Chọn tài liệu PDF"}</strong>
+          <span>PDF only · hệ thống sẽ tạo job ingest sau khi upload</span>
           <input
+            id="pdf-upload"
             accept="application/pdf"
             type="file"
             onChange={(event) => setFile(event.target.files?.[0] || null)}
           />
         </label>
-        <label>
+
+        <label htmlFor="document-domain">
           Lĩnh vực
           <input
+            id="document-domain"
             placeholder="Ví dụ: hình sự, thuế, doanh nghiệp..."
             value={domain}
             onChange={(event) => setDomain(event.target.value)}
           />
+          <span className="form-helper">Để trống sẽ dùng nhóm mặc định: general.</span>
         </label>
+
         <button className="primary">
           <Upload size={18} /> Ingest
         </button>
-        {status && <div className="notice">{status}</div>}
+        {status && (
+          <div className="notice alert-card">
+            <Database size={18} />
+            <span>{status}</span>
+          </div>
+        )}
       </form>
-      <div className="table-panel">
+
+      <div className="table-panel documents-panel">
         <PanelTitle title="Documents" />
         {documents.length === 0 ? (
           <EmptyState text="Chưa có tài liệu được ingest." />
@@ -188,70 +259,67 @@ function DocumentTable({
   }
 
   return (
-    <div>
-      <div style={{ marginBottom: "16px", display: "flex", gap: "12px", alignItems: "center" }}>
-        <input
-          type="text"
-          placeholder="Tìm kiếm tài liệu (tên, lĩnh vực)..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ maxWidth: "320px", padding: "10px 14px" }}
-        />
-        <span style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
-          {filtered.length} kết quả
-        </span>
+    <div className="table-stack">
+      <div className="table-toolbar">
+        <label className="search-field" htmlFor="document-search">
+          <Search size={17} />
+          <input
+            id="document-search"
+            type="text"
+            placeholder="Tìm kiếm tài liệu (tên, lĩnh vực)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </label>
+        <span className="result-count">{filtered.length} kết quả</span>
       </div>
-      <table>
-        <thead>
-          <tr>
-            <th>Title</th>
-            <th>Domain</th>
-            <th>Status</th>
-            <th>Chunks</th>
-            <th style={{ textAlign: "center" }}>Enabled</th>
-          </tr>
-        </thead>
-        <tbody>
-          {displayed.map((document) => (
-            <tr key={document.document_id}>
-              <td>{document.title}</td>
-              <td>{document.domain}</td>
-              <td>
-                <StatusBadge status={document.ingestion_status} />
-              </td>
-              <td>{document.chunks_count}</td>
-              <td style={{ textAlign: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={document.enabled}
-                  onChange={() => toggle(document.document_id, document.enabled)}
-                  style={{ cursor: "pointer", width: "16px", height: "16px" }}
-                />
-              </td>
+
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Domain</th>
+              <th>Status</th>
+              <th>Chunks</th>
+              <th className="center-cell">Enabled</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-      
+          </thead>
+          <tbody>
+            {displayed.map((document) => (
+              <tr key={document.document_id}>
+                <td>
+                  <strong className="table-title">{document.title}</strong>
+                </td>
+                <td>{document.domain}</td>
+                <td>
+                  <StatusBadge status={document.ingestion_status} />
+                </td>
+                <td>{document.chunks_count}</td>
+                <td className="center-cell">
+                  <input
+                    className="toggle-checkbox"
+                    type="checkbox"
+                    checked={document.enabled}
+                    onChange={() => toggle(document.document_id, document.enabled)}
+                    aria-label={`Toggle ${document.title}`}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       {totalPages > 1 && (
-        <div style={{ display: "flex", gap: "12px", marginTop: "20px", justifyContent: "flex-end", alignItems: "center" }}>
-          <button 
-            className="ghost" 
-            disabled={page === 1} 
-            onClick={() => setPage(p => p - 1)}
-            style={{ padding: "6px 12px", borderRadius: "6px" }}
-          >
+        <div className="pagination-bar">
+          <button className="ghost compact" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
             Trước
           </button>
-          <span style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-secondary)" }}>
+          <span>
             Trang {page} / {totalPages}
           </span>
-          <button 
-            className="ghost" 
-            disabled={page === totalPages} 
-            onClick={() => setPage(p => p + 1)}
-            style={{ padding: "6px 12px", borderRadius: "6px" }}
-          >
+          <button className="ghost compact" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
             Sau
           </button>
         </div>
@@ -278,43 +346,48 @@ function Jobs() {
   }
 
   return (
-    <div className="table-panel">
+    <div className="table-panel jobs-panel">
       <PanelTitle title="Ingestion Jobs" />
       {jobs.length === 0 ? (
         <EmptyState text="Chưa có job ingest." />
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Job</th>
-              <th>Document</th>
-              <th>Status</th>
-              <th>Chunks</th>
-              <th>Message</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs.map((job) => (
-              <tr key={job.task_id}>
-                <td>{job.task_id}</td>
-                <td>{job.document_id}</td>
-                <td>
-                  <StatusBadge status={job.status} />
-                </td>
-                <td>{job.chunks_indexed}</td>
-                <td>{job.error || job.message}</td>
-                <td>
-                  <button className="ghost" onClick={() => retry(job.task_id)}>
-                    <RefreshCw size={16} /> Retry
-                  </button>
-                </td>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Job</th>
+                <th>Document</th>
+                <th>Status</th>
+                <th>Chunks</th>
+                <th>Message</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {jobs.map((job) => (
+                <tr key={job.task_id}>
+                  <td>
+                    <code className="table-code">{job.task_id}</code>
+                  </td>
+                  <td>
+                    <code className="table-code">{job.document_id}</code>
+                  </td>
+                  <td>
+                    <StatusBadge status={job.status} />
+                  </td>
+                  <td>{job.chunks_indexed}</td>
+                  <td className="job-message">{job.error || job.message}</td>
+                  <td>
+                    <button className="ghost compact" onClick={() => retry(job.task_id)}>
+                      <RefreshCw size={16} /> Retry
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
 }
-

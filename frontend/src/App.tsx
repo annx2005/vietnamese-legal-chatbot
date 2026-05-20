@@ -4,7 +4,9 @@ import {
   LogIn,
   LogOut,
   MessageSquareText,
+  Scale,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { AuthUser } from "./types";
 import { readStoredUser, AUTH_STORAGE_KEY } from "./api";
@@ -38,36 +40,61 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <ShieldCheck size={24} />
-          <div>
+          <div className="brand-mark" aria-hidden="true">
+            <ShieldCheck size={24} />
+          </div>
+          <div className="brand-copy">
             <strong>Tra cứu pháp luật</strong>
+            <span>Legal RAG Assistant</span>
           </div>
         </div>
-        <button
-          className={path === "/chat" ? "nav active" : "nav"}
-          onClick={() => setPath("/chat")}
-        >
-          <MessageSquareText size={18} /> Chat
-        </button>
-        {isAdmin ? (
+
+        <nav className="sidebar-nav" aria-label="Primary navigation">
           <button
-            className={path === "/admin" ? "nav active" : "nav"}
-            onClick={() => setPath("/admin")}
+            className={path === "/chat" ? "nav active" : "nav"}
+            onClick={() => setPath("/chat")}
+            aria-current={path === "/chat" ? "page" : undefined}
           >
-            <BarChart3 size={18} /> Admin
+            <span className="nav-indicator" />
+            <MessageSquareText size={18} />
+            <span>Chat</span>
           </button>
-        ) : (
-          <button
-            className={path === "/admin" ? "nav active" : "nav"}
-            onClick={() => setPath("/admin")}
-          >
-            <LogIn size={18} /> Đăng nhập
-          </button>
-        )}
+          {isAdmin ? (
+            <button
+              className={path === "/admin" ? "nav active" : "nav"}
+              onClick={() => setPath("/admin")}
+              aria-current={path === "/admin" ? "page" : undefined}
+            >
+              <span className="nav-indicator" />
+              <BarChart3 size={18} />
+              <span>Admin</span>
+            </button>
+          ) : (
+            <button
+              className={path === "/admin" ? "nav active" : "nav"}
+              onClick={() => setPath("/admin")}
+              aria-current={path === "/admin" ? "page" : undefined}
+            >
+              <span className="nav-indicator" />
+              <LogIn size={18} />
+              <span>Đăng nhập</span>
+            </button>
+          )}
+        </nav>
+
         {user && (
           <div className="account-panel">
-            <span>{user.username}</span>
-            <small>{user.role === "ROLE_ADMIN" ? "Admin" : "User"}</small>
+            <div className="account-avatar" aria-hidden="true">
+              <Scale size={18} />
+            </div>
+            <div className="account-copy">
+              <span>{user.username}</span>
+              <small>{user.role === "ROLE_ADMIN" ? "Administrator" : "User"}</small>
+            </div>
+            <div className="account-badge">
+              <Sparkles size={13} />
+              Active
+            </div>
             <button className="ghost logout-button" onClick={logout}>
               <LogOut size={16} /> Đăng xuất
             </button>
