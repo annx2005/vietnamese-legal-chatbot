@@ -37,11 +37,13 @@ Open:
 
 Admin upload, ingestion, and review APIs require a JWT with `ROLE_ADMIN`. Local defaults are `ADMIN_USERNAME=admin` and `ADMIN_PASSWORD=admin123`; change `JWT_SECRET_KEY` before any shared demo or deployment.
 
+Local Docker uses the cloud Qdrant endpoint from `.env`, but keeps its vectors in `COLLECTION_NAME=legal_documents_local` so they stay isolated from production.
+
 For easiest local testing without GCS, use the admin `file URL` field with a local text or PDF path that is visible inside the `ingestion-service` container, or call `POST /api/v1/ingest/` directly with an accessible `http`, `file`, `gs`, or container-local path.
 
 ## Import Hugging Face Legal Dataset
 
-The ingestion service includes a small importer for `vohuutridung/vietnamese-legal-documents`. It imports a limited demo sample across all domains by default, chunks the text, and upserts vectors into the Qdrant collection `legal_documents`.
+The ingestion service includes a small importer for `vohuutridung/vietnamese-legal-documents`. It chunks the text, upserts vectors into the configured Qdrant collection, and persists matching metadata rows into PostgreSQL `documents` and `ingestion_jobs`.
 
 If `QDRANT_URL` is set, the importer and runtime services connect to Qdrant Cloud using `QDRANT_API_KEY`. Otherwise they fall back to local `QDRANT_HOST` and `QDRANT_PORT`.
 
@@ -58,14 +60,21 @@ Rebuild the ingestion image after dependency changes:
 docker compose up -d --build ingestion-service
 ```
 
-Import a small demo sample:
+Import a small local demo sample:
 
 ```bash
-docker compose exec ingestion-service python scripts/import_hf_legal_documents.py \
-  --limit 300
+docker compose exec ingestion-service python scripts/import_hf_legal_documents.py
 ```
 
-After the import finishes, restart or redeploy `rag-service` so new Cloud Qdrant settings are picked up before testing chat.
+By default the importer reads `HF_IMPORT_LIMIT` from the environment. The checked-in local `.env` uses `HF_IMPORT_LIMIT=10`, so the command above imports 10 documents into `legal_documents_local`.
+
+To override the local limit manually:
+
+```bash
+docker compose exec ingestion-service python scripts/import_hf_legal_documents.py --limit 25
+```
+
+To import the full dataset into production, run the manual GitHub Actions workflow `Import Production Dataset`. It creates or updates a Cloud Run Job that uses the production `ingestion-service` image and config, writes vectors into `legal_documents_prod`, and persists metadata into Cloud SQL `metadata_db`.
 
 Useful options:
 

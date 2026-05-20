@@ -61,11 +61,12 @@ jobs:
           service: "frontend-${{ env.ENV }}"
           region: "${{ env.REGION }}"
           image: "${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/frontend:${{ github.sha }}"
+          env_vars: |-
+            VITE_API_BASE_URL=${{ steps.api-router-url.outputs.url }}
           flags: >-
             --allow-unauthenticated
             --port=8080
             --service-account=${{ env.APP_SERVICE_ACCOUNT }}
-            --set-env-vars=VITE_API_BASE_URL=${{ steps.api-router-url.outputs.url }}
 
       - name: Show Output URL
         run: echo "Deployed frontend to ${{ steps.deploy.outputs.url }}"

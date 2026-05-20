@@ -1,5 +1,6 @@
 import argparse
 import hashlib
+import os
 import sys
 import re
 import unicodedata
@@ -21,6 +22,7 @@ from app.services.vertex_ai_service import VertexAIEmbeddingService
 
 
 DATASET_NAME = "vohuutridung/vietnamese-legal-documents"
+DEFAULT_IMPORT_LIMIT = 10
 
 DOMAIN_KEYWORDS = {
     "dan-su": ("dan su", "hop dong", "nghia vu", "quyen dan su", "bo luat dan su"),
@@ -117,7 +119,7 @@ def matches_domains(metadata: dict, domains: Sequence[str]) -> bool:
     return False
 
 
-def select_metadata(limit: int, domains: Sequence[str]) -> Dict[int, dict]:
+def select_metadata(limit: int | None, domains: Sequence[str]) -> Dict[int, dict]:
     selected: Dict[int, dict] = {}
     metadata_rows = load_dataset(DATASET_NAME, "metadata", split="data", streaming=True)
     for row in metadata_rows:
@@ -133,7 +135,7 @@ def select_metadata(limit: int, domains: Sequence[str]) -> Dict[int, dict]:
             "issuing_authority": row.get("issuing_authority") or "",
             "issuance_date": row.get("issuance_date") or "",
         }
-        if len(selected) >= limit:
+        if limit is not None and len(selected) >= limit:
             break
     return selected
 
@@ -247,7 +249,12 @@ def make_points(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Import a small Hugging Face legal corpus sample into Qdrant.")
-    parser.add_argument("--limit", type=int, default=300, help="Number of documents to import. Use 200-1000 for demos.")
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=int(os.getenv("HF_IMPORT_LIMIT", str(DEFAULT_IMPORT_LIMIT))),
+        help="Number of documents to import. Use 0 for the full dataset.",
+    )
     parser.add_argument(
         "--domains",
         default="",
@@ -346,12 +353,14 @@ def persist_import_state(metadata_by_id: Dict[int, dict], chunk_counts: Dict[str
 
 def main() -> None:
     args = parse_args()
-    if args.limit < 1:
-        raise ValueError("--limit must be greater than 0")
+    if args.limit < 0:
+        raise ValueError("--limit must be greater than or equal to 0")
 
     domains = [domain.strip() for domain in args.domains.split(",") if domain.strip()]
-    print(f"Selecting up to {args.limit} documents from {DATASET_NAME} for domains: {domains or 'all'}")
-    metadata_by_id = select_metadata(args.limit, domains)
+    effective_limit = None if args.limit == 0 else args.limit
+    limit_label = "all matching documents" if effective_limit is None else f"up to {effective_limit} documents"
+    print(f"Selecting {limit_label} from {DATASET_NAME} for domains: {domains or 'all'}")
+    metadata_by_id = select_metadata(effective_limit, domains)
     if not metadata_by_id:
         raise RuntimeError("No matching metadata rows found. Try a larger --limit or verify dataset access.")
 
