@@ -25,7 +25,7 @@ Open:
 - RAG docs: `http://localhost:8000/docs`
 - Ingestion docs: `http://localhost:8001/docs`
 
-## MVP Flow
+## Flow
 
 1. Admin logs in at `/admin` and receives a Bearer JWT.
 2. Admin uploads a PDF or submits a file URL in `/admin`.
