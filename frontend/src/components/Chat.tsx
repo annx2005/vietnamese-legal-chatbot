@@ -12,6 +12,8 @@ import {
   Search,
   ShieldCheck,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api } from "../api";
 import { QueryResponse, Citation } from "../types";
 import { EmptyState } from "./Common";
@@ -121,7 +123,7 @@ export function Chat() {
               <span className="confidence-pill">{Math.round(response.confidence * 100)}% tin cậy</span>
             </div>
             <div className="answer-content">
-              <p>{response.answer}</p>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{response.answer}</ReactMarkdown>
             </div>
             <div className="legal-disclaimer">
               <Scale size={16} />

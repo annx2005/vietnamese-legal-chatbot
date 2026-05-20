@@ -743,11 +743,41 @@ textarea:focus {
   color: var(--text-primary);
   font-size: 1.02rem;
   line-height: 1.82;
-  white-space: pre-wrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .answer-content p {
   color: inherit;
+  margin: 0 0 14px;
+}
+
+.answer-content > :first-child {
+  margin-top: 0;
+}
+
+.answer-content > :last-child {
+  margin-bottom: 0;
+}
+
+.answer-content ul,
+.answer-content ol {
+  margin: 0 0 14px;
+  padding-left: 1.4rem;
+}
+
+.answer-content li + li {
+  margin-top: 8px;
+}
+
+.answer-content strong {
+  font-weight: 700;
+}
+
+.answer-content a {
+  color: var(--accent-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.14em;
 }
 
 .legal-disclaimer {
