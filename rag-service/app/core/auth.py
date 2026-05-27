@@ -14,11 +14,22 @@ def _decode_base64url(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + padding)
 
 
-def _sign(signing_input: str) -> str:
+def _hash_for_alg(alg: str):
+    algorithms = {
+        "HS256": hashlib.sha256,
+        "HS384": hashlib.sha384,
+        "HS512": hashlib.sha512,
+    }
+    if alg not in algorithms:
+        raise HTTPException(status_code=401, detail="Unsupported bearer token algorithm")
+    return algorithms[alg]
+
+
+def _sign(signing_input: str, alg: str) -> str:
     digest = hmac.new(
         settings.JWT_SECRET_KEY.encode("utf-8"),
         signing_input.encode("utf-8"),
-        hashlib.sha256,
+        _hash_for_alg(alg),
     ).digest()
     return base64.urlsafe_b64encode(digest).decode("utf-8").rstrip("=")
 
@@ -30,8 +41,15 @@ def _decode_jwt(authorization: str | None) -> dict[str, Any]:
     parts = token.split(".")
     if len(parts) != 3:
         raise HTTPException(status_code=401, detail="Invalid bearer token")
+    try:
+        header = json.loads(_decode_base64url(parts[0]))
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid bearer token") from exc
+    alg = str(header.get("alg") or "")
+    if not alg:
+        raise HTTPException(status_code=401, detail="Invalid bearer token")
     signing_input = f"{parts[0]}.{parts[1]}"
-    if not hmac.compare_digest(parts[2], _sign(signing_input)):
+    if not hmac.compare_digest(parts[2], _sign(signing_input, alg)):
         raise HTTPException(status_code=401, detail="Invalid bearer token")
     try:
         payload = json.loads(_decode_base64url(parts[1]))
