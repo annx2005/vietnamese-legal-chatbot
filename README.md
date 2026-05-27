@@ -86,6 +86,20 @@ Useful options:
 
 The importer stores these metadata fields in each Qdrant payload: `id`, `title`, `url`, `legal_type`, `legal_sectors`, `issuing_authority`, and `issuance_date`.
 
+## CI/CD for IaC
+
+Terraform and Helm changes are validated in GitHub Actions on pull requests via the `IaC Checks` workflow. Pushes to `main` automatically run `terraform apply` before the GKE deploy when files under `terraform/**` change.
+
+Configure a GitHub `prod` environment with these non-secret variables so Terraform does not rely on a checked-in `terraform.tfvars`:
+
+```bash
+TF_VAR_PROJECT_ID=legal-chatbot-496302
+TF_VAR_REGION=asia-southeast1
+TF_VAR_ENVIRONMENT=prod
+TF_VAR_BUCKET_NAME=vietnamese-legal-rag-documents
+TF_VAR_GITHUB_REPO=annx2005/vietnamese-legal-chatbot
+```
+
 ## Notes
 
 - The services now use Vertex AI for embeddings and answer generation when credentials are available.
