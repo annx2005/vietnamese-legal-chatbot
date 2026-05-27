@@ -7,6 +7,8 @@ metadata:
 {{ include "legal-rag.labels" (dict "root" . "component" "frontend") | indent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
 {{ include "legal-rag.selectorLabels" (dict "component" "frontend") | indent 6 }}
@@ -45,6 +47,8 @@ metadata:
 {{ include "legal-rag.labels" (dict "root" . "component" "api-router") | indent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
 {{ include "legal-rag.selectorLabels" (dict "component" "api-router") | indent 6 }}
@@ -86,6 +90,8 @@ metadata:
 {{ include "legal-rag.labels" (dict "root" . "component" "auth-service") | indent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
 {{ include "legal-rag.selectorLabels" (dict "component" "auth-service") | indent 6 }}
@@ -103,6 +109,8 @@ spec:
           ports:
             - containerPort: 8080
           env:
+            - name: PORT
+              value: "8080"
             - name: DATABASE_URL
               valueFrom:
                 configMapKeyRef:
@@ -150,6 +158,8 @@ metadata:
 {{ include "legal-rag.labels" (dict "root" . "component" "upload-service") | indent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
 {{ include "legal-rag.selectorLabels" (dict "component" "upload-service") | indent 6 }}
@@ -170,6 +180,8 @@ spec:
             - configMapRef:
                 name: legal-rag-config
           env:
+            - name: PORT
+              value: "8080"
             - name: PROJECT_ID
               valueFrom:
                 configMapKeyRef:
@@ -222,6 +234,8 @@ metadata:
 {{ include "legal-rag.labels" (dict "root" . "component" "rag-service") | indent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
 {{ include "legal-rag.selectorLabels" (dict "component" "rag-service") | indent 6 }}
@@ -267,6 +281,8 @@ metadata:
 {{ include "legal-rag.labels" (dict "root" . "component" "ingestion-service") | indent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
 {{ include "legal-rag.selectorLabels" (dict "component" "ingestion-service") | indent 6 }}
@@ -312,6 +328,8 @@ metadata:
 {{ include "legal-rag.labels" (dict "root" . "component" "ingestion-worker") | indent 4 }}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
 {{ include "legal-rag.selectorLabels" (dict "component" "ingestion-worker") | indent 6 }}

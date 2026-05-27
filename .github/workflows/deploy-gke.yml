@@ -136,15 +136,11 @@ jobs:
 
       - name: Smoke Test Internal API
         run: |-
-          kubectl -n "${GKE_NAMESPACE}" run smoke-rag-${GITHUB_RUN_ID} \
-            --rm -i --restart=Never \
-            --image=curlimages/curl:8.10.1 \
-            --command -- curl -fsS http://api-router:8080/api/v1/rag/health
+          kubectl -n "${GKE_NAMESPACE}" exec deploy/api-router -- \
+            wget -qO- http://api-router:8080/api/v1/rag/health
 
-          kubectl -n "${GKE_NAMESPACE}" run smoke-ingestion-${GITHUB_RUN_ID} \
-            --rm -i --restart=Never \
-            --image=curlimages/curl:8.10.1 \
-            --command -- curl -fsS http://api-router:8080/api/v1/ingest/health
+          kubectl -n "${GKE_NAMESPACE}" exec deploy/api-router -- \
+            wget -qO- http://api-router:8080/api/v1/ingest/health
 
       - name: Show GKE Ingress
         run: |-
