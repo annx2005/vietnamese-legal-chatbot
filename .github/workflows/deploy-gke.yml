@@ -1,6 +1,18 @@
 name: Build and Deploy GKE
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "frontend/**"
+      - "api-router/**"
+      - "auth-service/**"
+      - "upload-service/**"
+      - "ingestion-service/**"
+      - "rag-service/**"
+      - "charts/legal-rag/**"
+      - ".github/workflows/deploy-gke.yml"
   workflow_dispatch:
     inputs:
       cutover_cloud_run:
@@ -148,7 +160,7 @@ jobs:
           echo "Ingress IP may take a few minutes to appear after the first deploy."
 
       - name: Cut Over from Cloud Run
-        if: ${{ inputs.cutover_cloud_run }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.cutover_cloud_run }}
         run: |-
           for service in frontend api-router auth-service upload-service ingestion-service rag-service; do
             gcloud run services remove-iam-policy-binding "${service}-${ENV}" \
