@@ -1,0 +1,131 @@
+name: IaC Checks
+
+on:
+  pull_request:
+    paths:
+      - "terraform/**"
+      - "charts/legal-rag/**"
+      - ".github/workflows/iac-checks.yml"
+
+env:
+  TF_IN_AUTOMATION: "true"
+  PROJECT_ID: legal-chatbot-496302
+  REGION: asia-southeast1
+  ENV: prod
+  BUCKET_NAME: vietnamese-legal-rag-documents
+  WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider"
+  CICD_SERVICE_ACCOUNT: "legal-rag-cicd-prod@legal-chatbot-496302.iam.gserviceaccount.com"
+
+jobs:
+  detect-changes:
+    name: Detect IaC Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      pull-requests: "read"
+    outputs:
+      terraform: ${{ steps.filter.outputs.terraform }}
+      chart: ${{ steps.filter.outputs.chart }}
+      workflow: ${{ steps.filter.outputs.workflow }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Detect Changed Paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            terraform:
+              - 'terraform/**'
+            chart:
+              - 'charts/legal-rag/**'
+            workflow:
+              - '.github/workflows/iac-checks.yml'
+
+  terraform-checks:
+    name: Terraform Checks
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.terraform == 'true' || needs.detect-changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: "read"
+      id-token: "write"
+    env:
+      TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID != '' && vars.TF_VAR_PROJECT_ID || 'legal-chatbot-496302' }}
+      TF_VAR_region: ${{ vars.TF_VAR_REGION != '' && vars.TF_VAR_REGION || 'asia-southeast1' }}
+      TF_VAR_environment: ${{ vars.TF_VAR_ENVIRONMENT != '' && vars.TF_VAR_ENVIRONMENT || 'prod' }}
+      TF_VAR_bucket_name: ${{ vars.TF_VAR_BUCKET_NAME != '' && vars.TF_VAR_BUCKET_NAME || 'vietnamese-legal-rag-documents' }}
+      TF_VAR_github_repo: ${{ vars.TF_VAR_GITHUB_REPO != '' && vars.TF_VAR_GITHUB_REPO || github.repository }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Google Auth (Workload Identity Federation)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
+          service_account: "${{ env.CICD_SERVICE_ACCOUNT }}"
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+
+      - name: Terraform Format Check
+        working-directory: terraform
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        working-directory: terraform
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        working-directory: terraform
+        run: |-
+          terraform plan -input=false -no-color -out=tfplan
+          terraform show -no-color tfplan > tfplan.txt
+
+      - name: Publish Terraform Summary
+        working-directory: terraform
+        run: |-
+          {
+            echo "## Terraform Plan"
+            echo
+            echo '```text'
+            sed -n '1,200p' tfplan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Terraform Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan
+          path: terraform/tfplan.txt
+
+  helm-checks:
+    name: Helm Checks
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.chart == 'true' || needs.detect-changes.outputs.workflow == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm Lint
+        run: helm lint charts/legal-rag -f charts/legal-rag/values-prod.yaml
+
+      - name: Helm Template
+        run: helm template legal-rag charts/legal-rag -f charts/legal-rag/values-prod.yaml > /dev/null

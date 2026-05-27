@@ -5,6 +5,7 @@ on:
     branches:
       - main
     paths:
+      - "terraform/**"
       - "frontend/**"
       - "api-router/**"
       - "auth-service/**"
@@ -22,9 +23,11 @@ on:
         type: boolean
 
 env:
+  TF_IN_AUTOMATION: "true"
   PROJECT_ID: legal-chatbot-496302
   REGION: asia-southeast1
   ENV: prod
+  BUCKET_NAME: vietnamese-legal-rag-documents
   GKE_CLUSTER: legal-rag-gke-prod
   GKE_NAMESPACE: legal-rag-prod
   REGISTRY: asia-southeast1-docker.pkg.dev/legal-chatbot-496302/legal-rag-repo-prod
@@ -33,8 +36,116 @@ env:
   CICD_SERVICE_ACCOUNT: "legal-rag-cicd-prod@legal-chatbot-496302.iam.gserviceaccount.com"
 
 jobs:
+  detect-changes:
+    name: Detect Deployment Changes
+    runs-on: ubuntu-latest
+    permissions:
+      contents: "read"
+      pull-requests: "read"
+    outputs:
+      terraform: ${{ github.event_name == 'workflow_dispatch' && 'false' || steps.filter.outputs.terraform }}
+      chart: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.chart }}
+      services: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.services }}
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Detect Changed Paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            terraform:
+              - 'terraform/**'
+            chart:
+              - 'charts/legal-rag/**'
+            services:
+              - 'frontend/**'
+              - 'api-router/**'
+              - 'auth-service/**'
+              - 'upload-service/**'
+              - 'ingestion-service/**'
+              - 'rag-service/**'
+              - '.github/workflows/deploy-gke.yml'
+
+  terraform-apply:
+    name: Apply Terraform
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    environment: prod
+    permissions:
+      contents: "read"
+      id-token: "write"
+    env:
+      TF_VAR_project_id: ${{ vars.TF_VAR_PROJECT_ID != '' && vars.TF_VAR_PROJECT_ID || 'legal-chatbot-496302' }}
+      TF_VAR_region: ${{ vars.TF_VAR_REGION != '' && vars.TF_VAR_REGION || 'asia-southeast1' }}
+      TF_VAR_environment: ${{ vars.TF_VAR_ENVIRONMENT != '' && vars.TF_VAR_ENVIRONMENT || 'prod' }}
+      TF_VAR_bucket_name: ${{ vars.TF_VAR_BUCKET_NAME != '' && vars.TF_VAR_BUCKET_NAME || 'vietnamese-legal-rag-documents' }}
+      TF_VAR_github_repo: ${{ vars.TF_VAR_GITHUB_REPO != '' && vars.TF_VAR_GITHUB_REPO || github.repository }}
+    steps:
+      - name: Skip When No Terraform Changes
+        if: ${{ needs.detect-changes.outputs.terraform != 'true' }}
+        run: echo "No Terraform changes detected."
+
+      - name: Checkout Source Code
+        if: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+        uses: actions/checkout@v4
+
+      - name: Google Auth (Workload Identity Federation)
+        if: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: "${{ env.WIF_PROVIDER }}"
+          service_account: "${{ env.CICD_SERVICE_ACCOUNT }}"
+          create_credentials_file: true
+          export_environment_variables: true
+
+      - name: Set up Terraform
+        if: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.5.7"
+
+      - name: Terraform Init
+        if: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+        working-directory: terraform
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        if: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+        working-directory: terraform
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        if: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+        working-directory: terraform
+        run: |-
+          terraform plan -input=false -no-color -out=tfplan
+          terraform show -no-color tfplan > tfplan.txt
+
+      - name: Publish Terraform Summary
+        if: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+        working-directory: terraform
+        run: |-
+          {
+            echo "## Terraform Apply Plan"
+            echo
+            echo '```text'
+            sed -n '1,200p' tfplan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Terraform Apply
+        if: ${{ needs.detect-changes.outputs.terraform == 'true' }}
+        working-directory: terraform
+        run: terraform apply -input=false -auto-approve tfplan
+
   deploy-gke:
     name: Build Images and Deploy to GKE
+    needs:
+      - detect-changes
+      - terraform-apply
+    if: ${{ needs.detect-changes.outputs.chart == 'true' || needs.detect-changes.outputs.services == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: "read"
