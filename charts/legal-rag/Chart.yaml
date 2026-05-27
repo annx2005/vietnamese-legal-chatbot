@@ -1,0 +1,6 @@
+apiVersion: v2
+name: legal-rag
+description: Umbrella Helm chart for the Legal RAG microservices on GKE.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

@@ -6,6 +6,8 @@ class Settings(BaseSettings):
     GCP_PROJECT_ID: str = "legal-rag-project"
     GCP_LOCATION: str = "asia-southeast1"
     PUBSUB_TOPIC: str = "document-ingestion-topic"
+    PUBSUB_SUBSCRIPTION: str = ""
+    PUBSUB_WORKER_MAX_MESSAGES: int = 1
     GCS_BUCKET_NAME: str = "legal-documents-storage"
     QDRANT_URL: str = ""
     QDRANT_HOST: str = "localhost"

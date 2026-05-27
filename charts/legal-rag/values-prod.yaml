@@ -1,0 +1,118 @@
+global:
+  imageTag: latest
+  imagePullPolicy: IfNotPresent
+
+namespace:
+  create: true
+  name: legal-rag-prod
+
+serviceAccount:
+  name: legal-rag-app
+  annotations:
+    iam.gke.io/gcp-service-account: legal-rag-app-prod@legal-chatbot-496302.iam.gserviceaccount.com
+
+secret:
+  name: legal-rag-secrets
+
+config:
+  ADMIN_USERNAME: admin
+  BM25_ASCII_FOLDING: "true"
+  BM25_AVG_LEN: "0"
+  BM25_LANGUAGE: none
+  BM25_TOKENIZER: multilingual
+  CLOUD_SQL_CONNECTION_NAME: legal-chatbot-496302:asia-southeast1:legal-rag-db-prod
+  COLLECTION_NAME: legal_documents_gke
+  DB_NAME: metadata_db_gke
+  DB_USER: legal_app_user
+  EMBEDDING_MODEL_NAME: text-embedding-005
+  GCP_LOCATION: asia-southeast1
+  GCP_PROJECT_ID: legal-chatbot-496302
+  GCS_BUCKET_NAME: vietnamese-legal-rag-documents
+  HYBRID_DENSE_PREFETCH_MULTIPLIER: "4"
+  HYBRID_SPARSE_PREFETCH_MULTIPLIER: "4"
+  JDBC_DATABASE_URL: jdbc:postgresql:///metadata_db_gke?cloudSqlInstance=legal-chatbot-496302:asia-southeast1:legal-rag-db-prod&socketFactory=com.google.cloud.sql.postgres.SocketFactory
+  LLM_MODEL_NAME: gemini-2.5-flash
+  PROJECT_ID: legal-chatbot-496302
+  PUBSUB_SUBSCRIPTION: legal-document-ingestion-gke-sub-prod
+  PUBSUB_TOPIC: legal-document-uploaded-gke-prod
+  PUBSUB_TOPIC_NAME: legal-document-uploaded-gke-prod
+  PUBSUB_WORKER_MAX_MESSAGES: "1"
+  QDRANT_SPARSE_VECTOR_NAME: bm25_sparse_vector
+  SEARCH_MODE: hybrid
+  SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: "10000"
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "2"
+  SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: "600000"
+  SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "0"
+  SPRING_DATASOURCE_USERNAME: legal_app_user
+  UPLOAD_BUCKET_NAME: vietnamese-legal-rag-documents
+  VITE_API_BASE_URL: ""
+
+cloudSqlProxy:
+  image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.13.0
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+frontend:
+  image:
+    repository: asia-southeast1-docker.pkg.dev/legal-chatbot-496302/legal-rag-repo-prod/frontend
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+apiRouter:
+  image:
+    repository: asia-southeast1-docker.pkg.dev/legal-chatbot-496302/legal-rag-repo-prod/api-router
+  routes:
+    authServiceUrl: http://auth-service:8080
+    uploadServiceUrl: http://upload-service:8080
+    ingestionServiceUrl: http://ingestion-service:8000
+    ragServiceUrl: http://rag-service:8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+authService:
+  image:
+    repository: asia-southeast1-docker.pkg.dev/legal-chatbot-496302/legal-rag-repo-prod/auth-service
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+uploadService:
+  image:
+    repository: asia-southeast1-docker.pkg.dev/legal-chatbot-496302/legal-rag-repo-prod/upload-service
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+ragService:
+  image:
+    repository: asia-southeast1-docker.pkg.dev/legal-chatbot-496302/legal-rag-repo-prod/rag-service
+  resources:
+    requests:
+      cpu: 500m
+      memory: 768Mi
+
+ingestionService:
+  image:
+    repository: asia-southeast1-docker.pkg.dev/legal-chatbot-496302/legal-rag-repo-prod/ingestion-service
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+ingestionWorker:
+  command:
+    - python
+    - -m
+    - app.worker
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi

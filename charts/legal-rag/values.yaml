@@ -1,0 +1,160 @@
+global:
+  imageTag: latest
+  imagePullPolicy: IfNotPresent
+
+namespace:
+  create: true
+  name: legal-rag-prod
+
+serviceAccount:
+  name: legal-rag-app
+  annotations: {}
+
+secret:
+  name: legal-rag-secrets
+
+config:
+  ADMIN_USERNAME: admin
+  BM25_ASCII_FOLDING: "true"
+  BM25_AVG_LEN: "0"
+  BM25_LANGUAGE: none
+  BM25_TOKENIZER: multilingual
+  CLOUD_SQL_CONNECTION_NAME: ""
+  COLLECTION_NAME: legal_documents_gke
+  DB_NAME: metadata_db_gke
+  DB_USER: legal_app_user
+  EMBEDDING_MODEL_NAME: text-embedding-005
+  GCP_LOCATION: asia-southeast1
+  GCP_PROJECT_ID: ""
+  GCS_BUCKET_NAME: ""
+  HYBRID_DENSE_PREFETCH_MULTIPLIER: "4"
+  HYBRID_SPARSE_PREFETCH_MULTIPLIER: "4"
+  JDBC_DATABASE_URL: ""
+  LLM_MODEL_NAME: gemini-2.5-flash
+  PROJECT_ID: ""
+  PUBSUB_SUBSCRIPTION: ""
+  PUBSUB_TOPIC: ""
+  PUBSUB_TOPIC_NAME: ""
+  PUBSUB_WORKER_MAX_MESSAGES: "1"
+  QDRANT_SPARSE_VECTOR_NAME: bm25_sparse_vector
+  SEARCH_MODE: hybrid
+  SPRING_DATASOURCE_HIKARI_IDLE_TIMEOUT: "10000"
+  SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "2"
+  SPRING_DATASOURCE_HIKARI_MAX_LIFETIME: "600000"
+  SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "0"
+  SPRING_DATASOURCE_USERNAME: legal_app_user
+  UPLOAD_BUCKET_NAME: ""
+  VITE_API_BASE_URL: ""
+
+cloudSqlProxy:
+  image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.13.0
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+
+frontend:
+  image:
+    repository: frontend
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+apiRouter:
+  image:
+    repository: api-router
+  routes:
+    authServiceUrl: http://auth-service:8080
+    uploadServiceUrl: http://upload-service:8080
+    ingestionServiceUrl: http://ingestion-service:8000
+    ragServiceUrl: http://rag-service:8000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+authService:
+  image:
+    repository: auth-service
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+uploadService:
+  image:
+    repository: upload-service
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+ragService:
+  image:
+    repository: rag-service
+  resources:
+    requests:
+      cpu: 500m
+      memory: 768Mi
+
+ingestionService:
+  image:
+    repository: ingestion-service
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+ingestionWorker:
+  command:
+    - python
+    - -m
+    - app.worker
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+
+services:
+  frontend:
+    annotations:
+      cloud.google.com/neg: '{"ingress": true}'
+    port: 8080
+    targetPort: 8080
+  api-router:
+    annotations:
+      cloud.google.com/backend-config: '{"default":"api-router-backendconfig"}'
+      cloud.google.com/neg: '{"ingress": true}'
+    port: 8080
+    targetPort: 8080
+  auth-service:
+    port: 8080
+    targetPort: 8080
+  upload-service:
+    port: 8080
+    targetPort: 8080
+  rag-service:
+    port: 8000
+    targetPort: 8000
+  ingestion-service:
+    port: 8000
+    targetPort: 8000
+
+backendConfig:
+  name: api-router-backendconfig
+  healthCheck:
+    type: HTTP
+    requestPath: /api/v1/rag/health
+    port: 8080
+
+ingress:
+  name: legal-rag-ingress
+  className: gce
+  paths:
+    - path: /api
+      serviceName: api-router
+      servicePort: 8080
+    - path: /
+      serviceName: frontend
+      servicePort: 8080

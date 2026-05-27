@@ -1,0 +1,344 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: {{ .Values.namespace.name }}
+  labels:
+{{ include "legal-rag.labels" (dict "root" . "component" "frontend") | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "legal-rag.selectorLabels" (dict "component" "frontend") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "legal-rag.selectorLabels" (dict "component" "frontend") | indent 8 }}
+{{ include "legal-rag.labels" (dict "root" . "component" "frontend") | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: frontend
+          image: {{ include "legal-rag.image" (dict "root" . "image" .Values.frontend.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: VITE_API_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: legal-rag-config
+                  key: VITE_API_BASE_URL
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+          resources:
+{{ toYaml .Values.frontend.resources | indent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-router
+  namespace: {{ .Values.namespace.name }}
+  labels:
+{{ include "legal-rag.labels" (dict "root" . "component" "api-router") | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "legal-rag.selectorLabels" (dict "component" "api-router") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "legal-rag.selectorLabels" (dict "component" "api-router") | indent 8 }}
+{{ include "legal-rag.labels" (dict "root" . "component" "api-router") | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: api-router
+          image: {{ include "legal-rag.image" (dict "root" . "image" .Values.apiRouter.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AUTH_SERVICE_URL
+              value: {{ .Values.apiRouter.routes.authServiceUrl }}
+            - name: UPLOAD_SERVICE_URL
+              value: {{ .Values.apiRouter.routes.uploadServiceUrl }}
+            - name: INGESTION_SERVICE_URL
+              value: {{ .Values.apiRouter.routes.ingestionServiceUrl }}
+            - name: RAG_SERVICE_URL
+              value: {{ .Values.apiRouter.routes.ragServiceUrl }}
+          readinessProbe:
+            httpGet:
+              path: /api/v1/rag/health
+              port: 8080
+          resources:
+{{ toYaml .Values.apiRouter.resources | indent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: {{ .Values.namespace.name }}
+  labels:
+{{ include "legal-rag.labels" (dict "root" . "component" "auth-service") | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "legal-rag.selectorLabels" (dict "component" "auth-service") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "legal-rag.selectorLabels" (dict "component" "auth-service") | indent 8 }}
+{{ include "legal-rag.labels" (dict "root" . "component" "auth-service") | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: auth-service
+          image: {{ include "legal-rag.image" (dict "root" . "image" .Values.authService.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: legal-rag-config
+                  key: JDBC_DATABASE_URL
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: legal-rag-config
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: DB_PASSWORD
+            - name: ADMIN_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: legal-rag-config
+                  key: ADMIN_USERNAME
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: ADMIN_PASSWORD
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: JWT_SECRET_KEY
+          readinessProbe:
+            httpGet:
+              path: /api/v1/auth/actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+          resources:
+{{ toYaml .Values.authService.resources | indent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upload-service
+  namespace: {{ .Values.namespace.name }}
+  labels:
+{{ include "legal-rag.labels" (dict "root" . "component" "upload-service") | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "legal-rag.selectorLabels" (dict "component" "upload-service") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "legal-rag.selectorLabels" (dict "component" "upload-service") | indent 8 }}
+{{ include "legal-rag.labels" (dict "root" . "component" "upload-service") | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      containers:
+        - name: upload-service
+          image: {{ include "legal-rag.image" (dict "root" . "image" .Values.uploadService.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: legal-rag-config
+          env:
+            - name: PROJECT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: legal-rag-config
+                  key: PROJECT_ID
+            - name: UPLOAD_BUCKET_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: legal-rag-config
+                  key: UPLOAD_BUCKET_NAME
+            - name: PUBSUB_TOPIC_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: legal-rag-config
+                  key: PUBSUB_TOPIC_NAME
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: legal-rag-config
+                  key: JDBC_DATABASE_URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: legal-rag-config
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: SPRING_DATASOURCE_PASSWORD
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: JWT_SECRET_KEY
+          readinessProbe:
+            httpGet:
+              path: /api/v1/upload/actuator/health
+              port: 8080
+            initialDelaySeconds: 30
+          resources:
+{{ toYaml .Values.uploadService.resources | indent 12 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rag-service
+  namespace: {{ .Values.namespace.name }}
+  labels:
+{{ include "legal-rag.labels" (dict "root" . "component" "rag-service") | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "legal-rag.selectorLabels" (dict "component" "rag-service") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "legal-rag.selectorLabels" (dict "component" "rag-service") | indent 8 }}
+{{ include "legal-rag.labels" (dict "root" . "component" "rag-service") | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      volumes:
+        - name: cloudsql
+          emptyDir: {}
+      containers:
+        - name: rag-service
+          image: {{ include "legal-rag.image" (dict "root" . "image" .Values.ragService.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: legal-rag-config
+          env:
+{{ include "legal-rag.secretEnv" . | indent 12 }}
+          volumeMounts:
+            - name: cloudsql
+              mountPath: /cloudsql
+          readinessProbe:
+            httpGet:
+              path: /api/v1/rag/health
+              port: 8000
+            initialDelaySeconds: 20
+          resources:
+{{ toYaml .Values.ragService.resources | indent 12 }}
+{{ include "legal-rag.cloudSqlProxy" . | indent 8 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-service
+  namespace: {{ .Values.namespace.name }}
+  labels:
+{{ include "legal-rag.labels" (dict "root" . "component" "ingestion-service") | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "legal-rag.selectorLabels" (dict "component" "ingestion-service") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "legal-rag.selectorLabels" (dict "component" "ingestion-service") | indent 8 }}
+{{ include "legal-rag.labels" (dict "root" . "component" "ingestion-service") | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      volumes:
+        - name: cloudsql
+          emptyDir: {}
+      containers:
+        - name: ingestion-service
+          image: {{ include "legal-rag.image" (dict "root" . "image" .Values.ingestionService.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: legal-rag-config
+          env:
+{{ include "legal-rag.secretEnv" . | indent 12 }}
+          volumeMounts:
+            - name: cloudsql
+              mountPath: /cloudsql
+          readinessProbe:
+            httpGet:
+              path: /api/v1/ingest/health
+              port: 8000
+            initialDelaySeconds: 20
+          resources:
+{{ toYaml .Values.ingestionService.resources | indent 12 }}
+{{ include "legal-rag.cloudSqlProxy" . | indent 8 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingestion-worker
+  namespace: {{ .Values.namespace.name }}
+  labels:
+{{ include "legal-rag.labels" (dict "root" . "component" "ingestion-worker") | indent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+{{ include "legal-rag.selectorLabels" (dict "component" "ingestion-worker") | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ include "legal-rag.selectorLabels" (dict "component" "ingestion-worker") | indent 8 }}
+{{ include "legal-rag.labels" (dict "root" . "component" "ingestion-worker") | indent 8 }}
+    spec:
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      volumes:
+        - name: cloudsql
+          emptyDir: {}
+      containers:
+        - name: ingestion-worker
+          image: {{ include "legal-rag.image" (dict "root" . "image" .Values.ingestionService.image) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          command:
+{{ toYaml .Values.ingestionWorker.command | indent 12 }}
+          envFrom:
+            - configMapRef:
+                name: legal-rag-config
+          env:
+{{ include "legal-rag.secretEnv" . | indent 12 }}
+          volumeMounts:
+            - name: cloudsql
+              mountPath: /cloudsql
+          resources:
+{{ toYaml .Values.ingestionWorker.resources | indent 12 }}
+{{ include "legal-rag.cloudSqlProxy" . | indent 8 }}

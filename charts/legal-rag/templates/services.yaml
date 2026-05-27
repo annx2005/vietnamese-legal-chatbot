@@ -1,0 +1,21 @@
+{{- range $name, $service := .Values.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.namespace.name }}
+  labels:
+{{ include "legal-rag.labels" (dict "root" $ "component" $name) | indent 4 }}
+{{- with $service.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  selector:
+{{ include "legal-rag.selectorLabels" (dict "component" $name) | indent 4 }}
+  ports:
+    - name: http
+      port: {{ $service.port }}
+      targetPort: {{ $service.targetPort }}
+{{- end }}

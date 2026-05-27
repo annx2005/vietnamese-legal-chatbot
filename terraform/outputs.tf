@@ -22,3 +22,23 @@ output "db_connection_name" {
   description = "Connection Name của Cloud SQL (dùng cho Cloud SQL Auth Proxy)"
   value       = google_sql_database_instance.metadata_db.connection_name
 }
+
+output "gke_cluster_name" {
+  description = "Tên GKE Autopilot cluster cho cutover"
+  value       = google_container_cluster.gke_autopilot.name
+}
+
+output "gke_namespace" {
+  description = "Namespace Kubernetes cho ứng dụng Legal RAG"
+  value       = "legal-rag-${var.environment}"
+}
+
+output "gke_pubsub_topic" {
+  description = "Pub/Sub topic riêng cho upload-service trên GKE"
+  value       = google_pubsub_topic.document_uploaded_gke.name
+}
+
+output "gke_pubsub_subscription" {
+  description = "Pull subscription riêng cho ingestion-worker trên GKE"
+  value       = google_pubsub_subscription.document_ingestion_gke_sub.name
+}

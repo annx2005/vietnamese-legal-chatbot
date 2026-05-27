@@ -1,12 +1,7 @@
-name: Build and Deploy Frontend
+name: Manual Rollback - Build and Deploy Frontend to Cloud Run
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "frontend/**"
-      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
 
 env:
   PROJECT_ID: legal-chatbot-496302
@@ -42,8 +37,6 @@ jobs:
         run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev
 
       - name: Build and Push Frontend Image
-        # Notice that we no longer pass --build-arg VITE_API_BASE_URL
-        # The URL will be injected at runtime by the container's entrypoint script
         run: |-
           IMAGE_NAME="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/legal-rag-repo-${{ env.ENV }}/frontend:${{ github.sha }}"
           cd frontend

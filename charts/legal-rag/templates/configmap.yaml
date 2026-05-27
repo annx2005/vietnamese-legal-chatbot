@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: legal-rag-config
+  namespace: {{ .Values.namespace.name }}
+  labels:
+{{ include "legal-rag.labels" (dict "root" . "component" "config") | indent 4 }}
+data:
+{{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | toString | quote }}
+{{- end }}

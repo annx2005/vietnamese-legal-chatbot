@@ -1,0 +1,12 @@
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ .Values.backendConfig.name }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+{{ include "legal-rag.labels" (dict "root" . "component" "api-router") | indent 4 }}
+spec:
+  healthCheck:
+    type: {{ .Values.backendConfig.healthCheck.type }}
+    requestPath: {{ .Values.backendConfig.healthCheck.requestPath }}
+    port: {{ .Values.backendConfig.healthCheck.port }}

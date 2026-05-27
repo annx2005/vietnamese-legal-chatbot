@@ -54,7 +54,8 @@ resource "google_project_service" "services" {
     "secretmanager.googleapis.com",
     "artifactregistry.googleapis.com",
     "iamcredentials.googleapis.com", # Yêu cầu cho Workload Identity
-    "compute.googleapis.com"         # Yêu cầu chung cho Network
+    "compute.googleapis.com",        # Yêu cầu chung cho Network
+    "container.googleapis.com"       # Yêu cầu cho GKE
   ])
   project            = var.project_id
   service            = each.key
@@ -88,14 +89,40 @@ resource "google_pubsub_subscription" "document_ingestion_sub" {
   ack_deadline_seconds = 60
 }
 
+resource "google_pubsub_topic" "document_uploaded_gke" {
+  name       = "legal-document-uploaded-gke-${var.environment}"
+  project    = var.project_id
+  depends_on = [google_project_service.services]
+}
+
+resource "google_pubsub_subscription" "document_ingestion_gke_sub" {
+  name                       = "legal-document-ingestion-gke-sub-${var.environment}"
+  topic                      = google_pubsub_topic.document_uploaded_gke.name
+  project                    = var.project_id
+  ack_deadline_seconds       = 600
+  message_retention_duration = "604800s"
+}
+
 resource "google_pubsub_topic_iam_member" "sa_publisher" {
-  topic   = google_pubsub_topic.document_uploaded.name
-  role    = "roles/pubsub.publisher"
-  member  = "serviceAccount:${module.app_service_account.email}"
+  topic  = google_pubsub_topic.document_uploaded.name
+  role   = "roles/pubsub.publisher"
+  member = "serviceAccount:${module.app_service_account.email}"
 }
 
 resource "google_pubsub_subscription_iam_member" "sa_subscriber" {
   subscription = google_pubsub_subscription.document_ingestion_sub.name
+  role         = "roles/pubsub.subscriber"
+  member       = "serviceAccount:${module.app_service_account.email}"
+}
+
+resource "google_pubsub_topic_iam_member" "gke_sa_publisher" {
+  topic  = google_pubsub_topic.document_uploaded_gke.name
+  role   = "roles/pubsub.publisher"
+  member = "serviceAccount:${module.app_service_account.email}"
+}
+
+resource "google_pubsub_subscription_iam_member" "gke_sa_subscriber" {
+  subscription = google_pubsub_subscription.document_ingestion_gke_sub.name
   role         = "roles/pubsub.subscriber"
   member       = "serviceAccount:${module.app_service_account.email}"
 }
@@ -114,12 +141,17 @@ resource "google_sql_database_instance" "metadata_db" {
       ipv4_enabled = true # Cho phép Public IP để dev local có thể kết nối dễ dàng
     }
   }
-  depends_on = [google_project_service.services]
+  depends_on          = [google_project_service.services]
   deletion_protection = false # Đặt false để có thể xóa nhanh khi test
 }
 
 resource "google_sql_database" "database" {
   name     = "metadata_db"
+  instance = google_sql_database_instance.metadata_db.name
+}
+
+resource "google_sql_database" "gke_database" {
+  name     = "metadata_db_gke"
   instance = google_sql_database_instance.metadata_db.name
 }
 
@@ -151,6 +183,42 @@ resource "google_secret_manager_secret_version" "db_password_version" {
   secret_data = random_password.db_password.result
 }
 
+resource "random_password" "jwt_secret" {
+  length  = 48
+  special = false
+}
+
+resource "google_secret_manager_secret" "jwt_secret" {
+  secret_id = "legal-rag-jwt-secret-${var.environment}"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.services]
+}
+
+resource "google_secret_manager_secret_version" "jwt_secret_version" {
+  secret      = google_secret_manager_secret.jwt_secret.id
+  secret_data = random_password.jwt_secret.result
+}
+
+resource "random_password" "admin_password" {
+  length  = 20
+  special = false
+}
+
+resource "google_secret_manager_secret" "admin_password" {
+  secret_id = "legal-rag-admin-password-${var.environment}"
+  replication {
+    auto {}
+  }
+  depends_on = [google_project_service.services]
+}
+
+resource "google_secret_manager_secret_version" "admin_password_version" {
+  secret      = google_secret_manager_secret.admin_password.id
+  secret_data = random_password.admin_password.result
+}
+
 # Placeholder Secret cho Qdrant API Key
 resource "google_secret_manager_secret" "qdrant_api_key" {
   secret_id = "qdrant-api-key-${var.environment}"
@@ -176,6 +244,12 @@ resource "google_project_iam_member" "secret_accessor" {
   member  = "serviceAccount:${module.app_service_account.email}"
 }
 
+resource "google_project_iam_member" "cicd_secret_accessor" {
+  project = var.project_id
+  role    = "roles/secretmanager.secretAccessor"
+  member  = "serviceAccount:${module.cicd_service_account.email}"
+}
+
 # =========================================================================
 # 10. WORKLOAD IDENTITY FEDERATION (GCP -> GITHUB ACTIONS)
 # =========================================================================
@@ -190,7 +264,7 @@ resource "google_iam_workload_identity_pool_provider" "github_provider" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github_pool.workload_identity_pool_id
   workload_identity_pool_provider_id = "github-provider"
   display_name                       = "GitHub Provider"
-  
+
   attribute_mapping = {
     "google.subject"       = "assertion.sub"
     "attribute.actor"      = "assertion.actor"
@@ -198,7 +272,7 @@ resource "google_iam_workload_identity_pool_provider" "github_provider" {
   }
 
   attribute_condition = "attribute.repository == '${var.github_repo}'"
-  
+
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
   }
@@ -240,6 +314,18 @@ resource "google_project_iam_member" "pubsub_editor" {
   member  = "serviceAccount:${module.cicd_service_account.email}"
 }
 
+resource "google_project_iam_member" "container_developer" {
+  project = var.project_id
+  role    = "roles/container.developer"
+  member  = "serviceAccount:${module.cicd_service_account.email}"
+}
+
+resource "google_project_iam_member" "container_cluster_viewer" {
+  project = var.project_id
+  role    = "roles/container.clusterViewer"
+  member  = "serviceAccount:${module.cicd_service_account.email}"
+}
+
 # Lấy ID chuẩn của App SA để cấp quyền gắn vào Cloud Run
 data "google_service_account" "app_sa_data" {
   account_id = module.app_service_account.email
@@ -250,4 +336,28 @@ resource "google_service_account_iam_member" "cicd_can_act_as_app_sa" {
   service_account_id = data.google_service_account.app_sa_data.name
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${module.cicd_service_account.email}"
+}
+
+# =========================================================================
+# 12. GKE AUTOPILOT (CUTOVER TARGET)
+# =========================================================================
+resource "google_container_cluster" "gke_autopilot" {
+  name     = "legal-rag-gke-${var.environment}"
+  location = var.region
+
+  enable_autopilot = true
+
+  workload_identity_config {
+    workload_pool = "${var.project_id}.svc.id.goog"
+  }
+
+  deletion_protection = false
+  depends_on          = [google_project_service.services]
+}
+
+resource "google_service_account_iam_member" "gke_app_workload_identity" {
+  service_account_id = data.google_service_account.app_sa_data.name
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "serviceAccount:${var.project_id}.svc.id.goog[legal-rag-${var.environment}/legal-rag-app]"
+  depends_on         = [google_container_cluster.gke_autopilot]
 }

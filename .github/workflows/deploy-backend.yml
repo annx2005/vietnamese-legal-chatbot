@@ -1,16 +1,7 @@
-name: Build and Deploy Backend Services
+name: Manual Rollback - Build and Deploy Backend Services to Cloud Run
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "auth-service/**"
-      - "upload-service/**"
-      - "ingestion-service/**"
-      - "rag-service/**"
-      - "api-router/**"
-      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
 
 env:
   PROJECT_ID: legal-chatbot-496302
@@ -24,11 +15,11 @@ jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      auth: ${{ steps.filter.outputs.auth }}
-      upload: ${{ steps.filter.outputs.upload }}
-      ingestion: ${{ steps.filter.outputs.ingestion }}
-      rag: ${{ steps.filter.outputs.rag }}
-      api_router: ${{ steps.filter.outputs.api_router }}
+      auth: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.auth }}
+      upload: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.upload }}
+      ingestion: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.ingestion }}
+      rag: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.rag }}
+      api_router: ${{ github.event_name == 'workflow_dispatch' && 'true' || steps.filter.outputs.api_router }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -37,14 +28,19 @@ jobs:
           filters: |
             auth:
               - 'auth-service/**'
+              - '.github/workflows/deploy-backend.yml'
             upload:
               - 'upload-service/**'
+              - '.github/workflows/deploy-backend.yml'
             ingestion:
               - 'ingestion-service/**'
+              - '.github/workflows/deploy-backend.yml'
             rag:
               - 'rag-service/**'
+              - '.github/workflows/deploy-backend.yml'
             api_router:
               - 'api-router/**'
+              - '.github/workflows/deploy-backend.yml'
 
   deploy-backends:
     name: Deploy Backend Services
@@ -99,6 +95,11 @@ jobs:
               DB_NAME=metadata_db
               COLLECTION_NAME=legal_documents_prod
               EMBEDDING_MODEL_NAME=text-embedding-005
+              QDRANT_SPARSE_VECTOR_NAME=bm25_sparse_vector
+              BM25_AVG_LEN=0
+              BM25_LANGUAGE=none
+              BM25_TOKENIZER=multilingual
+              BM25_ASCII_FOLDING=true
             secrets: |-
               DB_PASSWORD=legal-rag-db-password-prod:latest
               QDRANT_URL=qdrant-url-prod:latest
@@ -115,6 +116,13 @@ jobs:
               COLLECTION_NAME=legal_documents_prod
               EMBEDDING_MODEL_NAME=text-embedding-005
               LLM_MODEL_NAME=gemini-2.5-flash
+              SEARCH_MODE=hybrid
+              QDRANT_SPARSE_VECTOR_NAME=bm25_sparse_vector
+              BM25_LANGUAGE=none
+              BM25_TOKENIZER=multilingual
+              BM25_ASCII_FOLDING=true
+              HYBRID_DENSE_PREFETCH_MULTIPLIER=4
+              HYBRID_SPARSE_PREFETCH_MULTIPLIER=4
             secrets: |-
               DB_PASSWORD=legal-rag-db-password-prod:latest
               QDRANT_URL=qdrant-url-prod:latest
