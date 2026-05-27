@@ -254,7 +254,7 @@ resource "google_project_iam_member" "cicd_secret_accessor" {
 # 10. WORKLOAD IDENTITY FEDERATION (GCP -> GITHUB ACTIONS)
 # =========================================================================
 resource "google_iam_workload_identity_pool" "github_pool" {
-  workload_identity_pool_id = "github-actions-pool-${var.environment}"
+  workload_identity_pool_id = "github-actions-pool-${var.environment}-v2"
   display_name              = "GitHub Actions Pool"
   description               = "Identity pool for GitHub Actions deployments"
   depends_on                = [google_project_service.services]

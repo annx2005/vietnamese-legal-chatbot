@@ -32,7 +32,7 @@ env:
   GKE_NAMESPACE: legal-rag-prod
   REGISTRY: asia-southeast1-docker.pkg.dev/legal-chatbot-496302/legal-rag-repo-prod
   USE_GKE_GCLOUD_AUTH_PLUGIN: "True"
-  WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider"
+  WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod-v2/providers/github-provider"
   CICD_SERVICE_ACCOUNT: "legal-rag-cicd-prod@legal-chatbot-496302.iam.gserviceaccount.com"
 
 jobs:

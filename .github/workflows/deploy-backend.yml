@@ -7,7 +7,7 @@ env:
   PROJECT_ID: legal-chatbot-496302
   REGION: asia-southeast1
   ENV: prod
-  WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod/providers/github-provider"
+  WIF_PROVIDER: "projects/1038257786675/locations/global/workloadIdentityPools/github-actions-pool-prod-v2/providers/github-provider"
   CICD_SERVICE_ACCOUNT: "legal-rag-cicd-prod@legal-chatbot-496302.iam.gserviceaccount.com"
   APP_SERVICE_ACCOUNT: "legal-rag-app-prod@legal-chatbot-496302.iam.gserviceaccount.com"
 
@@ -127,7 +127,7 @@ jobs:
               DB_PASSWORD=legal-rag-db-password-prod:latest
               QDRANT_URL=qdrant-url-prod:latest
               QDRANT_API_KEY=qdrant-api-key-prod:latest
-    
+
     steps:
       - name: Checkout Source Code
         if: matrix.changed
