@@ -1,0 +1,142 @@
+name: Trivy Security Scan
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "auth-service/**"
+      - "upload-service/**"
+      - "frontend/**"
+      - "rag-service/**"
+      - "ingestion-service/**"
+      - "api-router/**"
+      - "charts/**"
+      - "terraform/**"
+      - "docker-compose.yml"
+      - ".github/workflows/trivy.yml"
+      - "TRIVY.md"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "auth-service/**"
+      - "upload-service/**"
+      - "frontend/**"
+      - "rag-service/**"
+      - "ingestion-service/**"
+      - "api-router/**"
+      - "charts/**"
+      - "terraform/**"
+      - "docker-compose.yml"
+      - ".github/workflows/trivy.yml"
+      - "TRIVY.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+env:
+  TRIVY_SEVERITY: HIGH,CRITICAL
+
+jobs:
+  filesystem:
+    name: Scan Filesystem and IaC
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Generate Filesystem SARIF
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-filesystem.sarif
+          exit-code: "0"
+          hide-progress: true
+
+      - name: Upload Filesystem SARIF
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-filesystem.sarif
+          category: trivy-filesystem
+
+      - name: Enforce Filesystem Findings
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          hide-progress: true
+
+  images:
+    name: Scan Image (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: frontend
+            context: frontend
+          - service: api-router
+            context: api-router
+          - service: auth-service
+            context: auth-service
+          - service: upload-service
+            context: upload-service
+          - service: rag-service
+            context: rag-service
+          - service: ingestion-service
+            context: ingestion-service
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Build Image
+        run: docker build -t "legal-rag/${{ matrix.service }}:${{ github.sha }}" "${{ matrix.context }}"
+
+      - name: Generate Image SARIF
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
+        with:
+          scan-type: image
+          image-ref: legal-rag/${{ matrix.service }}:${{ github.sha }}
+          scanners: vuln,secret
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          exit-code: "0"
+          hide-progress: true
+
+      - name: Upload Image SARIF
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-image-${{ matrix.service }}
+
+      - name: Enforce Image Findings
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8
+        with:
+          scan-type: image
+          image-ref: legal-rag/${{ matrix.service }}:${{ github.sha }}
+          scanners: vuln,secret
+          severity: ${{ env.TRIVY_SEVERITY }}
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          hide-progress: true
