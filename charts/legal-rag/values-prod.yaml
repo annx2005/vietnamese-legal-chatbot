@@ -53,6 +53,11 @@ cloudSqlProxy:
     requests:
       cpu: 50m
       memory: 128Mi
+      ephemeral-storage: 128Mi
+    limits:
+      cpu: 100m
+      memory: 256Mi
+      ephemeral-storage: 256Mi
 
 frontend:
   image:
@@ -61,6 +66,11 @@ frontend:
     requests:
       cpu: 100m
       memory: 128Mi
+      ephemeral-storage: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+      ephemeral-storage: 512Mi
 
 apiRouter:
   image:
@@ -74,6 +84,11 @@ apiRouter:
     requests:
       cpu: 100m
       memory: 128Mi
+      ephemeral-storage: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+      ephemeral-storage: 512Mi
 
 authService:
   image:
@@ -82,6 +97,11 @@ authService:
     requests:
       cpu: 250m
       memory: 512Mi
+      ephemeral-storage: 256Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+      ephemeral-storage: 512Mi
 
 uploadService:
   image:
@@ -90,6 +110,11 @@ uploadService:
     requests:
       cpu: 250m
       memory: 512Mi
+      ephemeral-storage: 256Mi
+    limits:
+      cpu: 500m
+      memory: 768Mi
+      ephemeral-storage: 512Mi
 
 ragService:
   image:
@@ -98,6 +123,11 @@ ragService:
     requests:
       cpu: 500m
       memory: 768Mi
+      ephemeral-storage: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1536Mi
+      ephemeral-storage: 1Gi
 
 ingestionService:
   image:
@@ -106,6 +136,11 @@ ingestionService:
     requests:
       cpu: 500m
       memory: 1Gi
+      ephemeral-storage: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1536Mi
+      ephemeral-storage: 1Gi
 
 ingestionWorker:
   command:
@@ -116,3 +151,8 @@ ingestionWorker:
     requests:
       cpu: 500m
       memory: 1Gi
+      ephemeral-storage: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1536Mi
+      ephemeral-storage: 1Gi

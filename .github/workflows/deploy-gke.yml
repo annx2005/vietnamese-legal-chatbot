@@ -251,6 +251,24 @@ jobs:
             --wait \
             --timeout 15m
 
+      - name: Dump GKE Diagnostics
+        if: failure()
+        run: |-
+          kubectl -n "${GKE_NAMESPACE}" get deploy,pods,svc,ingress -o wide || true
+          kubectl -n "${GKE_NAMESPACE}" get events --sort-by=.lastTimestamp | tail -120 || true
+          helm -n "${GKE_NAMESPACE}" status legal-rag || true
+
+          for deployment in frontend api-router auth-service upload-service rag-service ingestion-service ingestion-worker; do
+            echo "===== describe deployment/${deployment} ====="
+            kubectl -n "${GKE_NAMESPACE}" describe "deployment/${deployment}" || true
+
+            echo "===== logs deployment/${deployment} ====="
+            kubectl -n "${GKE_NAMESPACE}" logs "deployment/${deployment}" --all-containers --tail=200 || true
+
+            echo "===== previous logs deployment/${deployment} ====="
+            kubectl -n "${GKE_NAMESPACE}" logs "deployment/${deployment}" --all-containers --previous --tail=200 || true
+          done
+
       - name: Wait for Rollouts
         run: |-
           for deployment in frontend api-router auth-service upload-service rag-service ingestion-service ingestion-worker; do
