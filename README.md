@@ -66,6 +66,8 @@ Import a small local demo sample:
 docker compose exec ingestion-service python scripts/import_hf_legal_documents.py
 ```
 
+The source file lives at `ingestion-service/scripts/import_hf_legal_documents.py` in the repo, but `docker compose exec` runs inside the container, where the service `WORKDIR` is `/app` and the script is available at `scripts/import_hf_legal_documents.py`.
+
 By default the importer reads `HF_IMPORT_LIMIT` from the environment. The checked-in local `.env` uses `HF_IMPORT_LIMIT=10`, so the command above imports 10 documents into `legal_documents_local`.
 
 To override the local limit manually:
