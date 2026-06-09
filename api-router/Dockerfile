@@ -1,6 +1,7 @@
 FROM nginx:1.27-alpine
 
 RUN apk upgrade --no-cache \
+    && sed -i 's|^[[:space:]]*pid[[:space:]].*|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
     && chown -R nginx:nginx /etc/nginx/conf.d /var/cache/nginx /var/log/nginx /var/run
 
 COPY default.conf.template /etc/nginx/templates/default.conf.template

@@ -13,7 +13,8 @@ COPY . .
 RUN npm run build
 
 FROM nginx:1.27-alpine
-RUN apk upgrade --no-cache
+RUN apk upgrade --no-cache \
+    && sed -i 's|^[[:space:]]*pid[[:space:]].*|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY docker-entrypoint.sh /docker-entrypoint.sh
