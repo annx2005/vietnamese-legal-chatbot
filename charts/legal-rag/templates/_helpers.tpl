@@ -46,9 +46,25 @@ app: {{ .component | quote }}
       key: QDRANT_API_KEY
 {{- end -}}
 
+{{- define "legal-rag.podSecurityContext" -}}
+securityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+{{- end -}}
+
+{{- define "legal-rag.containerSecurityContext" -}}
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+{{- end -}}
+
 {{- define "legal-rag.cloudSqlProxy" -}}
 - name: cloud-sql-proxy
   image: {{ .Values.cloudSqlProxy.image }}
+{{ include "legal-rag.containerSecurityContext" . | indent 2 }}
   args:
     - --unix-socket=/cloudsql
     - $(CLOUD_SQL_CONNECTION_NAME)

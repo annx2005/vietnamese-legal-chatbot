@@ -14,6 +14,7 @@ on:
       - "charts/**"
       - "terraform/**"
       - "docker-compose.yml"
+      - ".trivyignore"
       - ".github/workflows/trivy.yml"
       - "TRIVY.md"
   pull_request:
@@ -28,6 +29,7 @@ on:
       - "charts/**"
       - "terraform/**"
       - "docker-compose.yml"
+      - ".trivyignore"
       - ".github/workflows/trivy.yml"
       - "TRIVY.md"
   workflow_dispatch:

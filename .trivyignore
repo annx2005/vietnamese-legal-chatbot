@@ -1,0 +1,12 @@
+# The Nginx entrypoints render runtime config/env files after container start.
+# Enforcing readOnlyRootFilesystem would currently break frontend and api-router.
+AVD-KSV-0014
+
+# False positive: BM25_TOKENIZER is tokenizer mode config, not a secret.
+AVD-KSV-0109
+
+# Accepted infra trade-offs for the current GKE/Cloud SQL setup.
+AVD-GCP-0007
+AVD-GCP-0015
+AVD-GCP-0017
+AVD-GCP-0061

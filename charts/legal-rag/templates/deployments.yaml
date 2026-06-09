@@ -19,10 +19,12 @@ spec:
 {{ include "legal-rag.labels" (dict "root" . "component" "frontend") | indent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+{{ include "legal-rag.podSecurityContext" . | indent 6 }}
       containers:
         - name: frontend
           image: {{ include "legal-rag.image" (dict "root" . "image" .Values.frontend.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{ include "legal-rag.containerSecurityContext" . | indent 10 }}
           ports:
             - containerPort: 8080
           env:
@@ -59,10 +61,12 @@ spec:
 {{ include "legal-rag.labels" (dict "root" . "component" "api-router") | indent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+{{ include "legal-rag.podSecurityContext" . | indent 6 }}
       containers:
         - name: api-router
           image: {{ include "legal-rag.image" (dict "root" . "image" .Values.apiRouter.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{ include "legal-rag.containerSecurityContext" . | indent 10 }}
           ports:
             - containerPort: 8080
           env:
@@ -102,10 +106,12 @@ spec:
 {{ include "legal-rag.labels" (dict "root" . "component" "auth-service") | indent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+{{ include "legal-rag.podSecurityContext" . | indent 6 }}
       containers:
         - name: auth-service
           image: {{ include "legal-rag.image" (dict "root" . "image" .Values.authService.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{ include "legal-rag.containerSecurityContext" . | indent 10 }}
           ports:
             - containerPort: 8080
           env:
@@ -170,10 +176,12 @@ spec:
 {{ include "legal-rag.labels" (dict "root" . "component" "upload-service") | indent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+{{ include "legal-rag.podSecurityContext" . | indent 6 }}
       containers:
         - name: upload-service
           image: {{ include "legal-rag.image" (dict "root" . "image" .Values.uploadService.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{ include "legal-rag.containerSecurityContext" . | indent 10 }}
           ports:
             - containerPort: 8080
           envFrom:
@@ -246,6 +254,7 @@ spec:
 {{ include "legal-rag.labels" (dict "root" . "component" "rag-service") | indent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+{{ include "legal-rag.podSecurityContext" . | indent 6 }}
       volumes:
         - name: cloudsql
           emptyDir: {}
@@ -253,6 +262,7 @@ spec:
         - name: rag-service
           image: {{ include "legal-rag.image" (dict "root" . "image" .Values.ragService.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{ include "legal-rag.containerSecurityContext" . | indent 10 }}
           ports:
             - containerPort: 8000
           envFrom:
@@ -293,6 +303,7 @@ spec:
 {{ include "legal-rag.labels" (dict "root" . "component" "ingestion-service") | indent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+{{ include "legal-rag.podSecurityContext" . | indent 6 }}
       volumes:
         - name: cloudsql
           emptyDir: {}
@@ -300,6 +311,7 @@ spec:
         - name: ingestion-service
           image: {{ include "legal-rag.image" (dict "root" . "image" .Values.ingestionService.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{ include "legal-rag.containerSecurityContext" . | indent 10 }}
           ports:
             - containerPort: 8000
           envFrom:
@@ -340,6 +352,7 @@ spec:
 {{ include "legal-rag.labels" (dict "root" . "component" "ingestion-worker") | indent 8 }}
     spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
+{{ include "legal-rag.podSecurityContext" . | indent 6 }}
       volumes:
         - name: cloudsql
           emptyDir: {}
@@ -347,6 +360,7 @@ spec:
         - name: ingestion-worker
           image: {{ include "legal-rag.image" (dict "root" . "image" .Values.ingestionService.image) }}
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+{{ include "legal-rag.containerSecurityContext" . | indent 10 }}
           command:
 {{ toYaml .Values.ingestionWorker.command | indent 12 }}
           envFrom:
