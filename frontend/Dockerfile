@@ -21,6 +21,6 @@ RUN chmod +x /docker-entrypoint.sh \
     && chown -R nginx:nginx /etc/nginx/conf.d /usr/share/nginx/html /var/cache/nginx /var/log/nginx /var/run
 
 EXPOSE 8080
-USER nginx
+USER 101
 ENTRYPOINT ["/docker-entrypoint.sh"]
 CMD ["nginx", "-g", "daemon off;"]
