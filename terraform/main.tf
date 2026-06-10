@@ -141,6 +141,10 @@ resource "google_sql_database_instance" "metadata_db" {
       name  = "log_connections"
       value = "on"
     }
+    database_flags {
+      name  = "log_disconnections"
+      value = "on"
+    }
     ip_configuration {
       ipv4_enabled = true # Cho phép Public IP để dev local có thể kết nối dễ dàng
     }
