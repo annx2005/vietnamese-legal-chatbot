@@ -9,7 +9,7 @@ WORKDIR /app
 RUN apk upgrade --no-cache \
     && addgroup -S -g 10001 app \
     && adduser -S -u 10001 -G app app
-COPY --from=build --chown=10001:10001 /app/target/*.jar app.jar
+COPY --from=build --chown=10001:10001 --chmod=0444 /app/target/*.jar app.jar
 EXPOSE 8080
 USER 10001
 ENTRYPOINT ["java", "-jar", "app.jar"]

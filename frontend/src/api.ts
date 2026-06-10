@@ -2,7 +2,14 @@ import { AuthUser, QueryResponse, DocumentRecord, IngestionJob, ChatLog } from "
 
 export const AUTH_STORAGE_KEY = "legal-rag-auth-user";
 const envGlobal = (window as any).ENV || {};
-const API_BASE_URL = (envGlobal.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+const trimTrailingSlashes = (value: string): string => {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end -= 1;
+  }
+  return value.slice(0, end);
+};
+const API_BASE_URL = trimTrailingSlashes(envGlobal.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || "");
 
 const requestCache = new Map<string, { data: any; expiresAt: number }>();
 
@@ -24,7 +31,7 @@ export function readStoredToken(): string {
 }
 
 function resolveUrl(path: string): string {
-  if (/^https?:\/\//.test(path)) {
+  if (path.startsWith("http://") || path.startsWith("https://")) {
     return path;
   }
   return API_BASE_URL ? `${API_BASE_URL}${path}` : path;

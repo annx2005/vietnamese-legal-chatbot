@@ -495,7 +495,7 @@ class IngestionService:
     @staticmethod
     def _pubsub_task_id(message_id: Optional[str], document_id: str) -> str:
         dedupe_key = message_id or f"document:{document_id}"
-        digest = hashlib.sha1(dedupe_key.encode("utf-8")).hexdigest()[:24]
+        digest = hashlib.sha256(dedupe_key.encode("utf-8")).hexdigest()[:24]
         return f"pubsub_{digest}"
 
     @staticmethod

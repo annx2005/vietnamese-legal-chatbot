@@ -137,6 +137,10 @@ resource "google_sql_database_instance" "metadata_db" {
 
   settings {
     tier = "db-f1-micro" # Cấu hình thấp nhất để tiết kiệm chi phí
+    database_flags {
+      name  = "log_connections"
+      value = "on"
+    }
     ip_configuration {
       ipv4_enabled = true # Cho phép Public IP để dev local có thể kết nối dễ dàng
     }
